@@ -1,16 +1,6 @@
 targets:
   $default:
     builders:
-      # The configuration for drift_dev is correct and necessary
-      # because we want to limit where it runs.
       drift_dev:
         generate_for:
           - lib/core/database/database.dart
-      
-      # The `freezed` package works with `source_gen|combining_builder`
-      # automatically. We only need to tell it which files to run on.
-      # By removing the manual 'options' and 'build_extensions', we resolve
-      # the conflict and let `freezed` handle its own configuration.
-      source_gen|combining_builder:
-        generate_for:
-          - lib/models/app_user.dart
