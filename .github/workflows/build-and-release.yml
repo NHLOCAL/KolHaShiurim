@@ -28,7 +28,7 @@ jobs:
 
       - name: Build Windows executable
         working-directory: torah_shiurim_transfer
-        run: flutter build windows --release --target-name Shiur-Bot
+        run: flutter build windows --release
 
       - name: Package Release
         run: |
