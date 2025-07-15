@@ -1,86 +1,135 @@
-# .github/workflows/build-and-release.yml
+# .github/workflows/build-and-release-windows.yml
+
+# שם ה-Workflow, יוצג בלשונית Actions ב-GitHub
 name: Build Shiur-Bot EXE & Create Release
 
+# הגדרת משתני סביבה גלובליים לשימוש חוזר ונוחות
+env:
+  PROJECT_NAME: Shiur-Bot
+  FLUTTER_PROJECT_DIR: torah_shiurim_transfer
+
+# הגדרת הטריגרים שיפעילו את ה-Workflow
 on:
-  # הפעלה אוטומטית רק כאשר נוצרת תגית חדשה (לדוגמה: v1.0.0)
-  push:
-    tags:
-      - 'v*.*.*' # Trigger on tags like v1.0.0, v1.2.3, etc.
-  
-  # הפעלה ידנית דרך ממשק ה-Actions ב-GitHub
+  # הפעלה ידנית דרך ממשק ה-Actions
   workflow_dispatch:
+  
+  # הפעלה אוטומטית בעת דחיפת קוד
+  push:
+    # יפעל על כל תג (tag) חדש, למשל v1.0.0, v1.0.1-beta
+    tags:
+      - 'v*.*.*'
+    # יפעל גם על דחיפות לענפים הראשיים (לטובת בדיקת תהליך הבנייה)
+    branches:
+      - main
+      - dev
 
 jobs:
+  # --- Job 1: בניית גרסת ה-EXE של חלונות ---
   build-windows:
-    name: Build Windows EXE
+    name: Build Shiur-Bot Windows EXE
+    # ה-Job ירוץ על מכונה וירטואלית עם מערכת הפעלה Windows
     runs-on: windows-latest
-    
+
     steps:
+      # שלב 1: הורדת קוד המקור מהריפוזיטורי
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      # שלב 2: התקנת סביבת Flutter בגרסה הרצויה
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: 'stable' # מומלץ להצמיד גרסה ספציפית אם יש צורך, אך stable יתאים לרוב המקרים
+          channel: 'stable' # תמיד ישתמש בגרסה היציבה האחרונה
 
-      - name: Install Flutter Dependencies
-        # ✅ התאמה: הפקודה רצה בתוך תיקיית הפרויקט של Flutter
-        working-directory: torah_shiurim_transfer 
+      # שלב 3: התקנת התלויות של הפרויקט (Packages)
+      - name: Install Dependencies
+        # חשוב: הגדרת תיקיית העבודה הנכונה
+        working-directory: ${{ env.FLUTTER_PROJECT_DIR }}
         run: flutter pub get
 
-      - name: Build Windows Release EXE
-        # ✅ התאמה: הפקודה רצה בתוך תיקיית הפרויקט של Flutter
-        working-directory: torah_shiurim_transfer
+      # שלב 4: בניית קובץ ה-EXE בגרסת Release
+      - name: Build Windows Release
+        working-directory: ${{ env.FLUTTER_PROJECT_DIR }}
         run: flutter build windows --release
 
-      - name: Archive Release Files into a ZIP
-        # ✅ התאמה: הנתיב לתיקיית ה-Release המובנית
-        working-directory: torah_shiurim_transfer/build/windows/x64/runner/Release
-        # ✅ התאמה: שם קובץ ה-ZIP יהיה בתיקייה הראשית של הריפו
-        run: Compress-Archive -Path * -DestinationPath ../../../../../../Shiur-Bot-windows.zip
+      # שלב 5: אריזת כל קבצי ה-Release לתוך קובץ ZIP יחיד
+      - name: Package Release into ZIP
+        # מיקום תיקיית הפלט של הבנייה
+        working-directory: ${{ env.FLUTTER_PROJECT_DIR }}/build/windows/x64/runner/Release
+        # שימוש ב-PowerShell (ברירת מחדל ב-windows-latest) כדי לכווץ את כל התוכן
+        # התוצאה תהיה קובץ בשם 'windows-release.zip' ברמה העליונה של הפרויקט
+        run: Compress-Archive -Path * -DestinationPath ../../../../../../windows-release.zip
 
-      - name: Upload Windows ZIP Artifact
+      # שלב 6: העלאת קובץ ה-ZIP כ-Artifact
+      # זה מאפשר ל-Job הבא (create-release) להשתמש בקובץ שנבנה כאן
+      - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: windows-release-artifact
-          path: Shiur-Bot-windows.zip # ✅ התאמה: שם הקובץ שנוצר בשלב הקודם
+          name: windows-build # שם ה-Artifact
+          path: windows-release.zip
 
-  publish-github-release:
-    name: Publish GitHub Release
-    # תלות: ה-Job הזה ירוץ רק אם ה-Job של הבנייה הצליח
-    needs: [build-windows]
+  # --- Job 2: יצירת GitHub Release והעלאת הקובץ ---
+  create-release:
+    name: Create GitHub Release
+    
+    # תנאי הפעלה: ה-Job הזה ירוץ אך ורק אם הטריגר היה יצירת תג (tag) חדש
+    if: startsWith(github.ref, 'refs/tags/')
+    
+    # תלות: ה-Job הזה ימתין עד ש-Job הבנייה (build-windows) יסתיים בהצלחה
+    needs: build-windows
+    
+    # ניתן להריץ את ה-Job הזה על מכונת אובונטו, היא מהירה וזולה יותר
     runs-on: ubuntu-latest
-    # נדרשות הרשאות כתיבה כדי ליצור Release
+    
+    # הרשאות נדרשות כדי לאפשר ל-Action לכתוב Release לריפוזיטורי
     permissions:
       contents: write
 
     steps:
-      - name: Download Windows ZIP artifact from build job
+      # שלב 1: הורדת ה-Artifact (קובץ ה-ZIP) מה-Job הקודם
+      - name: Download Build Artifact
         uses: actions/download-artifact@v4
         with:
-          name: windows-release-artifact
-          # הורדה לתיקייה הנוכחית
-          path: . 
+          name: windows-build # חייב להיות זהה לשם ה-Artifact שהועלה
 
-      - name: Rename asset for release
-        # ✅ התאמה: שינוי שם הקובץ כך שיכלול את מספר הגרסה מהתגית
-        run: mv Shiur-Bot-windows.zip Shiur-Bot-${{ github.ref_name }}-windows.zip
-        
-      - name: Create GitHub Release
+      # שלב 2: הכנת שם הקובץ הסופי
+      - name: Prepare Release Asset
+        id: prepare_asset # מזהה לשלב זה כדי שנוכל להשתמש בפלט שלו
+        run: |
+          # קבלת שם התג (לדוגמה 'v1.0.0')
+          TAG=${{ github.ref_name }}
+          # הרכבת שם הקובץ הסופי, לדוגמה: Shiur-Bot-v1.0.0-windows.zip
+          FILENAME="${{ env.PROJECT_NAME }}-${TAG}-windows.zip"
+          # שינוי שם הקובץ שהורדנו
+          mv windows-release.zip $FILENAME
+          # שמירת שם הקובץ החדש כפלט של השלב
+          echo "asset_path=$FILENAME" >> $GITHUB_OUTPUT
+
+      # שלב 3: יצירת ה-GitHub Release והעלאת הקובץ
+      - name: Create and Publish Release
         uses: softprops/action-gh-release@v2
         with:
-          # ✅ התאמה: שם הקובץ החדש שכולל את הגרסה
-          files: Shiur-Bot-${{ github.ref_name }}-windows.zip
-          tag_name: ${{ github.ref_name }}
-          name: Shiur-Bot | גרסה ${{ github.ref_name }}
-          body: |
-            גרסה ${{ github.ref_name }} של Shiur-Bot.
-            
-            קובץ מצורף:
-            - `Shiur-Bot-${{ github.ref_name }}-windows.zip` (קובץ ZIP המכיל את תוכנת ההתקנה לחלונות)
+          # קבצים להעלאה. כאן אנו משתמשים בפלט מהשלב הקודם
+          files: ${{ steps.prepare_asset.outputs.asset_path }}
           
-          # אם תרצה שה-Release יפורסם אוטומטית ולא כטיוטה, שנה ל-false
+          # שם ה-Release, לדוגמה: "Shiur-Bot v1.0.0"
+          name: ${{ env.PROJECT_NAME }} ${{ github.ref_name }}
+          
+          # תוכן ה-Release (התיאור)
+          body: |
+            גרסה **${{ github.ref_name }}** של **${{ env.PROJECT_NAME }}**.
+            
+            זוהי גרסת הפצה אוטומטית עבור מערכת ההפעלה Windows.
+            
+            ### מה כלול:
+            - קובץ התקנה (EXE) וכל התלויות הנדרשות בארכיון ZIP.
+            
+            ### הוראות שימוש:
+            1. הורד את קובץ ה-ZIP המצורף (`${{ steps.prepare_asset.outputs.asset_path }}`).
+            2. חלץ את כל הקבצים מה-ZIP לתיקייה חדשה.
+            3. הרץ את הקובץ `${{ env.PROJECT_NAME }}.exe` או `torah_shiurim_transfer.exe` (בהתאם לשם ה-exe הסופי).
+          
+          # האם ליצור טיוטה (draft)? false - פרסם מיד
           draft: false
-          # אם זו גרסת בטא/אלפא, שנה ל-true
-          prerelease: false 
+          # האם לסמן כ-pre-release?
+          prerelease: false
