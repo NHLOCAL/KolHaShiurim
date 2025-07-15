@@ -1,135 +1,132 @@
-# .github/workflows/build-and-release-windows.yml
+# File: .github/workflows/build-and-release.yml
+name: Build and Release
 
-# שם ה-Workflow, יוצג בלשונית Actions ב-GitHub
-name: Build Shiur-Bot EXE & Create Release
-
-# הגדרת משתני סביבה גלובליים לשימוש חוזר ונוחות
-env:
-  PROJECT_NAME: Shiur-Bot
-  FLUTTER_PROJECT_DIR: torah_shiurim_transfer
-
-# הגדרת הטריגרים שיפעילו את ה-Workflow
 on:
-  # הפעלה ידנית דרך ממשק ה-Actions
-  workflow_dispatch:
-  
-  # הפעלה אוטומטית בעת דחיפת קוד
   push:
-    # יפעל על כל תג (tag) חדש, למשל v1.0.0, v1.0.1-beta
-    tags:
-      - 'v*.*.*'
-    # יפעל גם על דחיפות לענפים הראשיים (לטובת בדיקת תהליך הבנייה)
     branches:
       - main
       - dev
+      - release/*
+    tags:
+      - '*'
+  workflow_dispatch:
 
 jobs:
-  # --- Job 1: בניית גרסת ה-EXE של חלונות ---
-  build-windows:
-    name: Build Shiur-Bot Windows EXE
-    # ה-Job ירוץ על מכונה וירטואלית עם מערכת הפעלה Windows
-    runs-on: windows-latest
-
+  android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
     steps:
-      # שלב 1: הורדת קוד המקור מהריפוזיטורי
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # שלב 2: התקנת סביבת Flutter בגרסה הרצויה
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: 'stable' # תמיד ישתמש בגרסה היציבה האחרונה
+          flutter-version: '3.32.4'
+          channel: 'stable'
 
-      # שלב 3: התקנת התלויות של הפרויקט (Packages)
       - name: Install Dependencies
-        # חשוב: הגדרת תיקיית העבודה הנכונה
-        working-directory: ${{ env.FLUTTER_PROJECT_DIR }}
+        working-directory: src
         run: flutter pub get
 
-      # שלב 4: בניית קובץ ה-EXE בגרסת Release
-      - name: Build Windows Release
-        working-directory: ${{ env.FLUTTER_PROJECT_DIR }}
-        run: flutter build windows --release
+      - name: Decode Keystore and Create Properties File
+        working-directory: src/android/app
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 --decode > key.jks
+          cat <<EOF > key.properties
+          storePassword=$KEY_PASSWORD
+          keyPassword=$KEY_PASSWORD
+          keyAlias=$KEY_ALIAS
+          storeFile=$(pwd)/key.jks
+          EOF
 
-      # שלב 5: אריזת כל קבצי ה-Release לתוך קובץ ZIP יחיד
-      - name: Package Release into ZIP
-        # מיקום תיקיית הפלט של הבנייה
-        working-directory: ${{ env.FLUTTER_PROJECT_DIR }}/build/windows/x64/runner/Release
-        # שימוש ב-PowerShell (ברירת מחדל ב-windows-latest) כדי לכווץ את כל התוכן
-        # התוצאה תהיה קובץ בשם 'windows-release.zip' ברמה העליונה של הפרויקט
-        run: Compress-Archive -Path * -DestinationPath ../../../../../../windows-release.zip
+      - name: Build Signed Android APK
+        working-directory: src
+        run: flutter build apk --release
 
-      # שלב 6: העלאת קובץ ה-ZIP כ-Artifact
-      # זה מאפשר ל-Job הבא (create-release) להשתמש בקובץ שנבנה כאן
-      - name: Upload Build Artifact
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: windows-build # שם ה-Artifact
-          path: windows-release.zip
+          name: android-apk-artifact
+          path: src/build/app/outputs/flutter-apk/app-release.apk
 
-  # --- Job 2: יצירת GitHub Release והעלאת הקובץ ---
-  create-release:
-    name: Create GitHub Release
-    
-    # תנאי הפעלה: ה-Job הזה ירוץ אך ורק אם הטריגר היה יצירת תג (tag) חדש
-    if: startsWith(github.ref, 'refs/tags/')
-    
-    # תלות: ה-Job הזה ימתין עד ש-Job הבנייה (build-windows) יסתיים בהצלחה
-    needs: build-windows
-    
-    # ניתן להריץ את ה-Job הזה על מכונת אובונטו, היא מהירה וזולה יותר
-    runs-on: ubuntu-latest
-    
-    # הרשאות נדרשות כדי לאפשר ל-Action לכתוב Release לריפוזיטורי
-    permissions:
-      contents: write
-
+  windows:
+    name: Build Windows EXE
+    runs-on: windows-latest
     steps:
-      # שלב 1: הורדת ה-Artifact (קובץ ה-ZIP) מה-Job הקודם
-      - name: Download Build Artifact
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.32.4'
+          channel: 'stable'
+
+      - name: Install Dependencies
+        working-directory: src
+        run: flutter pub get
+
+      - name: Build Windows EXE
+        working-directory: src
+        run: flutter build windows --release
+
+      - name: Upload Windows ZIP Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-zip-artifact
+          path: src/build/windows/runner/Release
+
+  release:
+    name: Create GitHub Release
+    needs:
+      - android
+      - windows
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Android APK Artifact
         uses: actions/download-artifact@v4
         with:
-          name: windows-build # חייב להיות זהה לשם ה-Artifact שהועלה
+          name: android-apk-artifact
+          path: artifacts/android
 
-      # שלב 2: הכנת שם הקובץ הסופי
-      - name: Prepare Release Asset
-        id: prepare_asset # מזהה לשלב זה כדי שנוכל להשתמש בפלט שלו
+      - name: Download Windows ZIP Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-zip-artifact
+          path: artifacts/windows
+
+      - name: Prepare Release Assets and Rename
+        env:
+          TAG_VERSION: ${{ github.ref_name }}
         run: |
-          # קבלת שם התג (לדוגמה 'v1.0.0')
-          TAG=${{ github.ref_name }}
-          # הרכבת שם הקובץ הסופי, לדוגמה: Shiur-Bot-v1.0.0-windows.zip
-          FILENAME="${{ env.PROJECT_NAME }}-${TAG}-windows.zip"
-          # שינוי שם הקובץ שהורדנו
-          mv windows-release.zip $FILENAME
-          # שמירת שם הקובץ החדש כפלט של השלב
-          echo "asset_path=$FILENAME" >> $GITHUB_OUTPUT
+          mv artifacts/android/app-release.apk artifacts/android/shamor-vezachor-${TAG_VERSION}.apk
+          mv artifacts/windows/windows-release.zip artifacts/windows/shamor-vezachor-${TAG_VERSION}-windows.zip
+          echo "Final files for release:"
+          ls -R artifacts/
 
-      # שלב 3: יצירת ה-GitHub Release והעלאת הקובץ
-      - name: Create and Publish Release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          # קבצים להעלאה. כאן אנו משתמשים בפלט מהשלב הקודם
-          files: ${{ steps.prepare_asset.outputs.asset_path }}
-          
-          # שם ה-Release, לדוגמה: "Shiur-Bot v1.0.0"
-          name: ${{ env.PROJECT_NAME }} ${{ github.ref_name }}
-          
-          # תוכן ה-Release (התיאור)
+          files: |
+            artifacts/android/shamor-vezachor-${{ github.ref_name }}.apk
+            artifacts/windows/shamor-vezachor-${{ github.ref_name }}-windows.zip
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
           body: |
-            גרסה **${{ github.ref_name }}** של **${{ env.PROJECT_NAME }}**.
-            
-            זוהי גרסת הפצה אוטומטית עבור מערכת ההפעלה Windows.
-            
-            ### מה כלול:
-            - קובץ התקנה (EXE) וכל התלויות הנדרשות בארכיון ZIP.
-            
-            ### הוראות שימוש:
-            1. הורד את קובץ ה-ZIP המצורף (`${{ steps.prepare_asset.outputs.asset_path }}`).
-            2. חלץ את כל הקבצים מה-ZIP לתיקייה חדשה.
-            3. הרץ את הקובץ `${{ env.PROJECT_NAME }}.exe` או `torah_shiurim_transfer.exe` (בהתאם לשם ה-exe הסופי).
-          
-          # האם ליצור טיוטה (draft)? false - פרסם מיד
-          draft: false
-          # האם לסמן כ-pre-release?
+            גרסה ${{ github.ref_name }} של שמור וזכור.
+            קבצים מצורפים:
+            - `shamor-vezachor-${{ github.ref_name }}.apk` (אנדרואיד)
+            - `shamor-vezachor-${{ github.ref_name }}-windows.zip` (חלונות)
+          draft: true
           prerelease: false
