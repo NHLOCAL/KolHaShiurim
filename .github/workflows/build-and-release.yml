@@ -1,5 +1,5 @@
 # File: .github/workflows/build-and-release.yml
-name: Build and Release
+name: Build Shiur-Bot and Release
 
 on:
   push:
@@ -32,11 +32,11 @@ jobs:
           channel: 'stable'
 
       - name: Install Dependencies
-        working-directory: src
+        working-directory: torah_shiurim_transfer
         run: flutter pub get
 
       - name: Decode Keystore and Create Properties File
-        working-directory: src/android/app
+        working-directory: torah_shiurim_transfer/android/app
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
@@ -51,14 +51,14 @@ jobs:
           EOF
 
       - name: Build Signed Android APK
-        working-directory: src
-        run: flutter build apk --release
+        working-directory: torah_shiurim_transfer
+        run: flutter build apk --release --flavor production --dart-define=BOT_NAME=Shiur-Bot
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: android-apk-artifact
-          path: src/build/app/outputs/flutter-apk/app-release.apk
+          name: shiur-bot-android-apk
+          path: torah_shiurim_transfer/build/app/outputs/flutter-apk/app-release.apk
 
   windows:
     name: Build Windows EXE
@@ -74,18 +74,18 @@ jobs:
           channel: 'stable'
 
       - name: Install Dependencies
-        working-directory: src
+        working-directory: torah_shiurim_transfer
         run: flutter pub get
 
       - name: Build Windows EXE
-        working-directory: src
-        run: flutter build windows --release
+        working-directory: torah_shiurim_transfer
+        run: flutter build windows --release --target-name Shiur-Bot
 
       - name: Upload Windows ZIP Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: windows-zip-artifact
-          path: src/build/windows/runner/Release
+          name: shiur-bot-windows-zip
+          path: torah_shiurim_transfer/build/windows/runner/Release
 
   release:
     name: Create GitHub Release
@@ -97,21 +97,21 @@ jobs:
       - name: Download Android APK Artifact
         uses: actions/download-artifact@v4
         with:
-          name: android-apk-artifact
+          name: shiur-bot-android-apk
           path: artifacts/android
 
       - name: Download Windows ZIP Artifact
         uses: actions/download-artifact@v4
         with:
-          name: windows-zip-artifact
+          name: shiur-bot-windows-zip
           path: artifacts/windows
 
       - name: Prepare Release Assets and Rename
         env:
           TAG_VERSION: ${{ github.ref_name }}
         run: |
-          mv artifacts/android/app-release.apk artifacts/android/shamor-vezachor-${TAG_VERSION}.apk
-          mv artifacts/windows/windows-release.zip artifacts/windows/shamor-vezachor-${TAG_VERSION}-windows.zip
+          mv artifacts/android/app-release.apk artifacts/android/shiur-bot-${TAG_VERSION}.apk
+          mv artifacts/windows/runner/Release artifacts/windows/shiur-bot-${TAG_VERSION}-windows.zip
           echo "Final files for release:"
           ls -R artifacts/
 
@@ -119,14 +119,14 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            artifacts/android/shamor-vezachor-${{ github.ref_name }}.apk
-            artifacts/windows/shamor-vezachor-${{ github.ref_name }}-windows.zip
+            artifacts/android/shiur-bot-${{ github.ref_name }}.apk
+            artifacts/windows/shiur-bot-${{ github.ref_name }}-windows.zip
           tag_name: ${{ github.ref_name }}
-          name: Release ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }} of Shiur-Bot
           body: |
-            גרסה ${{ github.ref_name }} של שמור וזכור.
+            גרסה ${{ github.ref_name }} של Shiur-Bot.
             קבצים מצורפים:
-            - `shamor-vezachor-${{ github.ref_name }}.apk` (אנדרואיד)
-            - `shamor-vezachor-${{ github.ref_name }}-windows.zip` (חלונות)
+            - `shiur-bot-${{ github.ref_name }}.apk` (אנדרואיד)
+            - `shiur-bot-${{ github.ref_name }}-windows.zip` (חלונות)
           draft: true
           prerelease: false
