@@ -1,22 +1,16 @@
-# build.yaml
-# קובץ זה מגדיר ל-build_runner איזה מחולל קוד להפעיל על אילו קבצים.
-# זה מונע קונפליקטים בין מחוללים שונים (כמו drift ו-freezed).
-
 targets:
   $default:
     builders:
-      # הגדרות עבור freezed (שמשתמש ב-source_gen)
-      source_gen|combining_builder:
-        options:
-          # זו הגדרה טכנית שמבטיחה שהפלט של freezed יהיה נכון
-          build_extensions:
-            '^lib/{{}}.dart': 'lib/{{}}.freezed.dart'
-        # ההגדרה החשובה ביותר: הנחיה להריץ את המחולל הזה *רק* על הקבצים הרלוונטיים.
-        generate_for:
-          - lib/models/app_user.dart
-
-      # הגדרות עבור drift
+      # The configuration for drift_dev is correct and necessary
+      # because we want to limit where it runs.
       drift_dev:
-        # הנחיה להריץ את המחולל הזה *רק* על קבצים המכילים הגדרות מסד נתונים.
         generate_for:
           - lib/core/database/database.dart
+      
+      # The `freezed` package works with `source_gen|combining_builder`
+      # automatically. We only need to tell it which files to run on.
+      # By removing the manual 'options' and 'build_extensions', we resolve
+      # the conflict and let `freezed` handle its own configuration.
+      source_gen|combining_builder:
+        generate_for:
+          - lib/models/app_user.dart
