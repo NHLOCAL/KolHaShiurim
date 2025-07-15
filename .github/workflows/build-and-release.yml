@@ -26,18 +26,21 @@ jobs:
         working-directory: torah_shiurim_transfer
         run: flutter pub get
 
+      - name: Generate code (build_runner)
+        working-directory: torah_shiurim_transfer
+        run: flutter pub run build_runner build --delete-conflicting-outputs
+
       - name: Build Windows executable
         working-directory: torah_shiurim_transfer
         run: flutter build windows --release
 
       - name: Package Release
-        run: |
-          cd torah_shiurim_transfer/build/windows/runner/Release
-          zip -r ../../../../shiur-bot-windows-${{ github.ref_name || github.sha }}.zip *
+        working-directory: torah_shiurim_transfer/build/windows/runner/Release
+        run: zip -r ../../../shiur-bot-windows-${{ github.ref_name || github.sha }}.zip *
         shell: bash
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: shiur-bot-windows
-          path: shiur-bot-windows-${{ github.ref_name || github.sha }}.zip
+          path: torah_shiurim_transfer/build/windows/runner/shiur-bot-windows-${{ github.ref_name || github.sha }}.zip
