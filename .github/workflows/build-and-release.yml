@@ -12,6 +12,13 @@ jobs:
   build-windows:
     name: Build Windows Executable
     runs-on: windows-latest
+
+    # הגדרת ברירת מחדל לכל פקודות ה-run ב-job הזה
+    # זה חוסך את הצורך לכתוב working-directory בכל שלב
+    defaults:
+      run:
+        working-directory: torah_shiurim_transfer
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -21,26 +28,37 @@ jobs:
         with:
           flutter-version: '3.32.4'
           channel: 'stable'
+          cache: true # מפעיל את ה-cache המובנה של subosito/flutter-action (אופציונלי אך מומלץ)
+      
+      # מומלץ להוסיף cache גם לחבילות ה-pub באופן מפורש לשליטה טובה יותר
+      - name: Cache Pub dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.FLUTTER_HOME }}/.pub-cache
+            torah_shiurim_transfer/.dart_tool
+            torah_shiurim_transfer/.packages
+          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pub-
 
       - name: Install dependencies
-        working-directory: torah_shiurim_transfer
         run: flutter pub get
 
       - name: Generate code (build_runner)
-        working-directory: torah_shiurim_transfer
         run: flutter pub run build_runner build --delete-conflicting-outputs
 
       - name: Build Windows executable
-        working-directory: torah_shiurim_transfer
         run: flutter build windows --release
 
       - name: Package Release
-        working-directory: torah_shiurim_transfer/build/windows/runner/Release
-        run: zip -r ../../../shiur-bot-windows-${{ github.ref_name || github.sha }}.zip *
+        # פישוט: הרצת הפקודה מתיקיית הבסיס של הפרויקט
+        run: zip -r shiur-bot-windows-${{ github.ref_name || github.sha }}.zip build/windows/runner/Release/
         shell: bash
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: shiur-bot-windows
-          path: torah_shiurim_transfer/build/windows/runner/shiur-bot-windows-${{ github.ref_name || github.sha }}.zip
+          # תיקון: הנתיב הנכון לקובץ ה-zip שנוצר בשלב הקודם
+          path: torah_shiurim_transfer/shiur-bot-windows-${{ github.ref_name || github.sha }}.zip
