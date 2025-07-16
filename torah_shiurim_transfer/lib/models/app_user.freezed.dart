@@ -223,10 +223,10 @@ class __$$AdminImplCopyWithImpl<$Res>
   @pragma('vm:prefer-inline')
   @override
   $Res call({
-    Object? user = freezed,
+    Object? user = null,
   }) {
     return _then(_$AdminImpl(
-      freezed == user
+      null == user
           ? _value.user
           : user // ignore: cast_nullable_to_non_nullable
               as User,
@@ -260,12 +260,11 @@ class _$AdminImpl extends _Admin with DiagnosticableTreeMixin {
     return identical(this, other) ||
         (other.runtimeType == runtimeType &&
             other is _$AdminImpl &&
-            const DeepCollectionEquality().equals(other.user, user));
+            (identical(other.user, user) || other.user == user));
   }
 
   @override
-  int get hashCode =>
-      Object.hash(runtimeType, const DeepCollectionEquality().hash(user));
+  int get hashCode => Object.hash(runtimeType, user);
 
   /// Create a copy of AppUserState
   /// with the given fields replaced by the non-null parameter values.
@@ -378,15 +377,15 @@ class __$$UserImplCopyWithImpl<$Res>
   @pragma('vm:prefer-inline')
   @override
   $Res call({
-    Object? user = freezed,
-    Object? device = freezed,
+    Object? user = null,
+    Object? device = null,
   }) {
     return _then(_$UserImpl(
-      user: freezed == user
+      user: null == user
           ? _value.user
           : user // ignore: cast_nullable_to_non_nullable
               as User,
-      device: freezed == device
+      device: null == device
           ? _value.device
           : device // ignore: cast_nullable_to_non_nullable
               as Device,
@@ -423,15 +422,12 @@ class _$UserImpl extends _User with DiagnosticableTreeMixin {
     return identical(this, other) ||
         (other.runtimeType == runtimeType &&
             other is _$UserImpl &&
-            const DeepCollectionEquality().equals(other.user, user) &&
-            const DeepCollectionEquality().equals(other.device, device));
+            (identical(other.user, user) || other.user == user) &&
+            (identical(other.device, device) || other.device == device));
   }
 
   @override
-  int get hashCode => Object.hash(
-      runtimeType,
-      const DeepCollectionEquality().hash(user),
-      const DeepCollectionEquality().hash(device));
+  int get hashCode => Object.hash(runtimeType, user, device);
 
   /// Create a copy of AppUserState
   /// with the given fields replaced by the non-null parameter values.
