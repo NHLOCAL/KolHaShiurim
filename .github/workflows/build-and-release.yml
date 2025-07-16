@@ -13,8 +13,6 @@ jobs:
     name: Build Windows Executable
     runs-on: windows-latest
 
-    # הגדרת ברירת מחדל לכל פקודות ה-run ב-job הזה
-    # זה חוסך את הצורך לכתוב working-directory בכל שלב
     defaults:
       run:
         working-directory: torah_shiurim_transfer
@@ -28,9 +26,8 @@ jobs:
         with:
           flutter-version: '3.32.4'
           channel: 'stable'
-          cache: true # מפעיל את ה-cache המובנה של subosito/flutter-action (אופציונלי אך מומלץ)
-      
-      # מומלץ להוסיף cache גם לחבילות ה-pub באופן מפורש לשליטה טובה יותר
+          cache: true
+
       - name: Cache Pub dependencies
         uses: actions/cache@v4
         with:
@@ -51,14 +48,14 @@ jobs:
       - name: Build Windows executable
         run: flutter build windows --release
 
-      - name: Package Release
-        # פישוט: הרצת הפקודה מתיקיית הבסיס של הפרויקט
-        run: zip -r shiur-bot-windows-${{ github.ref_name || github.sha }}.zip build/windows/runner/Release/
-        shell: bash
+      # --- התיקון כאן ---
+      - name: Package Release with PowerShell
+        run: |
+          Compress-Archive -Path build/windows/runner/Release/* -DestinationPath shiur-bot-windows-${{ github.ref_name }}.zip
+        # אין צורך ב-shell: bash, משתמשים ב-PowerShell שמהווה ברירת מחדל
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: shiur-bot-windows
-          # תיקון: הנתיב הנכון לקובץ ה-zip שנוצר בשלב הקודם
-          path: torah_shiurim_transfer/shiur-bot-windows-${{ github.ref_name || github.sha }}.zip
+          path: torah_shiurim_transfer/shiur-bot-windows-${{ github.ref_name }}.zip
