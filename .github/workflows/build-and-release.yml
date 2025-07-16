@@ -51,8 +51,8 @@ jobs:
       # --- התיקון כאן ---
       - name: Package Release with PowerShell
         run: |
-          Compress-Archive -Path build/windows/runner/Release/* -DestinationPath shiur-bot-windows-${{ github.ref_name }}.zip
-        # אין צורך ב-shell: bash, משתמשים ב-PowerShell שמהווה ברירת מחדל
+          Compress-Archive -Path build/windows/runner/Release -DestinationPath shiur-bot-windows-${{ github.ref_name }}.zip -Force
+
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
