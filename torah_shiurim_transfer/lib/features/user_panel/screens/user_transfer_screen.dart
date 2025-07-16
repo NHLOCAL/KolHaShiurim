@@ -5,17 +5,19 @@ import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 import 'package:torah_shiurim_transfer/core/database/database.dart';
 import 'package:torah_shiurim_transfer/core/providers/providers.dart';
-import 'package:drift/drift.dart'; // ודא שה-import הזה קיים
+// Note: Hiding 'Column' from drift to resolve ambiguity with Flutter's Column widget.
+import 'package:drift/drift.dart' hide Column;
 
 final _sourceFilesProvider = FutureProvider.autoDispose<List<File>>((ref) async {
   final authState = ref.watch(authStateProvider);
   final fileService = ref.watch(fileServiceProvider);
 
-  // שימוש ב-map כדי לגשת למצב בבטחה
+
+  // .map provides the full state object, so this usage is correct.
   return authState.map(
     loggedOut: (_) => [],
     admin: (_) => [],
-    user: (userState) async { // userState הוא מסוג _User
+    user: (userState) async {
       final device = userState.device;
       final sourcePath = p.join(device.mountPath, device.sourcePath);
       return fileService.getAudioFiles(sourcePath);
@@ -27,7 +29,7 @@ final _allowedRabbisProvider = StreamProvider.autoDispose<List<Rabbi>>((ref) {
   final authState = ref.watch(authStateProvider);
   final db = ref.watch(databaseProvider);
 
-  // שימוש ב-map כדי לגשת למצב בבטחה
+
   return authState.map(
     loggedOut: (_) => Stream.value([]),
     admin: (_) => Stream.value([]),
@@ -69,16 +71,20 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
             destinationDirectory: _selectedRabbi!.targetPath,
             newFileName: newFileName,
           );
-      
-      // שימוש ב-whenOrNull כדי לבצע פעולה רק במצב user
+
+
+      // FIXED: .whenOrNull deconstructs the state into its properties (user, device).
+      // The callback signature and usage are now correct.
       await authState.whenOrNull(
-        user: (userState) async {
+        user: (user, device) async {
+          // FIXED: Removed the `Value()` wrapper from the arguments.
+          // `TransfersCompanion.insert` expects raw values.
           await ref.read(databaseProvider).logTransfer(
                 TransfersCompanion.insert(
-                  userId: Value(userState.user.id), // גישה בטוחה
-                  sourceFile: Value(_selectedFile!.path),
-                  destinationFile: Value(p.join(_selectedRabbi!.targetPath, newFileName)),
-                  timestamp: Value(DateTime.now()),
+                  userId: user.id,
+                  sourceFile: _selectedFile!.path,
+                  destinationFile: p.join(_selectedRabbi!.targetPath, newFileName),
+                  timestamp: DateTime.now(),
                 ),
               );
         },
