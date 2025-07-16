@@ -1,11 +1,19 @@
 cmake_minimum_required(VERSION 3.14)
 project(runner LANGUAGES CXX)
 
-# Define the application target. To change its name, change BINARY_NAME in the
-# top-level CMakeLists.txt, not the value here, or `flutter run` will no longer
-# work.
-#
-# Any new source files that you add to the application should be added here.
+# --- START OF ADDED/MODIFIED SECTION ---
+
+# Instead of relying on a global variable, let's explicitly define the binary name.
+set(BINARY_NAME "torah_shiurim_transfer")
+
+# Define the output directory for our bundled files.
+set(BUNDLE_DIR "${CMAKE_BINARY_DIR}/runner/${CMAKE_BUILD_TYPE}")
+set(BUNDLE_DATA_DIR "${BUNDLE_DIR}/data")
+
+# --- END OF ADDED/MODIFIED SECTION ---
+
+
+# Define the application target.
 add_executable(${BINARY_NAME} WIN32
   "flutter_window.cpp"
   "main.cpp"
@@ -16,8 +24,7 @@ add_executable(${BINARY_NAME} WIN32
   "runner.exe.manifest"
 )
 
-# Apply the standard set of build settings. This can be removed for applications
-# that need different build settings.
+# Apply the standard set of build settings.
 apply_standard_settings(${BINARY_NAME})
 
 # Add preprocessor definitions for the build version.
@@ -30,11 +37,32 @@ target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION_BUILD=${FLUTT
 # Disable Windows macros that collide with C++ standard library functions.
 target_compile_definitions(${BINARY_NAME} PRIVATE "NOMINMAX")
 
-# Add dependency libraries and include directories. Add any application-specific
-# dependencies here.
+# Add dependency libraries and include directories.
 target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app)
 target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib")
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
-# Run the Flutter tool portions of the build. This must not be removed.
+# This dependency ensures flutter_assemble runs before this target.
 add_dependencies(${BINARY_NAME} flutter_assemble)
+
+
+# --- START OF NEW SECTION (CORE FIX) ---
+#
+# This section replaces the fragile default installation process with a robust
+# custom command that copies the necessary Flutter assets during the build.
+# This avoids the MSB3073 error often seen in CI/CD environments.
+#
+add_custom_command(
+  TARGET ${BINARY_NAME} POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+          "${FLUTTER_ICU_DATA_PATH}"
+          "${BUNDLE_DATA_DIR}"
+  COMMAND ${CMAKE_COMMAND} -E copy
+          "${FLUTTER_WINDOWS_DLL_PATH}"
+          "${BUNDLE_DIR}"
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+          "${FLUTTER_ASSETS_DIR}"
+          "${BUNDLE_DATA_DIR}/flutter_assets"
+  COMMENT "Copying Flutter necessary assets."
+)
+# --- END OF NEW SECTION (CORE FIX) ---
