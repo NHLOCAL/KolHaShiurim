@@ -1,6 +1,6 @@
-part of 'database.dart'; // <--- הוסף את השורה הזאת
+part of 'database.dart';
 
-// אין כאן שום import!
+// NOTE: No imports here, this is a part file.
 
 class Users extends Table {
   IntColumn get id => integer().autoIncrement()();
@@ -11,14 +11,18 @@ class Users extends Table {
 class Devices extends Table {
   IntColumn get id => integer().autoIncrement()();
   IntColumn get userId => integer().references(Users, #id)();
+  // CHANGED: This now stores the REAL hardware/volume serial number.
   TextColumn get serialNumber => text().unique()();
+  // CHANGED: This is the RELATIVE source path on the device, e.g., "records/" or "voice/".
   TextColumn get sourcePath => text()();
-  TextColumn get mountPath => text()();
+  // REMOVED: mountPath is transient and should not be in the database.
+  // The mount path (e.g., "E:\") is detected at runtime.
 }
 
 class Rabbis extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get name => text().unique()();
+  // This is the absolute target path on the local machine.
   TextColumn get targetPath => text()();
 }
 
