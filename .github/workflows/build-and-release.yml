@@ -39,8 +39,10 @@ jobs:
         run: flutter pub get
         working-directory: torah_shiurim_transfer
 
-      - name: Recreate platform-specific files
-        run: flutter create .
+      - name: Clean and recreate Windows platform files
+        run: |
+          remove-item -path windows -recurse -force
+          flutter create . --platforms=windows
         working-directory: torah_shiurim_transfer
 
       - name: Generate code (build_runner)
