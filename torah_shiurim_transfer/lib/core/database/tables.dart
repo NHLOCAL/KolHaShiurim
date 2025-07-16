@@ -11,12 +11,11 @@ class Users extends Table {
 class Devices extends Table {
   IntColumn get id => integer().autoIncrement()();
   IntColumn get userId => integer().references(Users, #id)();
-  // CHANGED: This now stores the REAL hardware/volume serial number.
+  // This now stores the REAL hardware/volume serial number.
   TextColumn get serialNumber => text().unique()();
-  // CHANGED: This is the RELATIVE source path on the device, e.g., "records/" or "voice/".
+  // This is the RELATIVE source path on the device, e.g., "records/" or "voice/".
   TextColumn get sourcePath => text()();
-  // REMOVED: mountPath is transient and should not be in the database.
-  // The mount path (e.g., "E:\") is detected at runtime.
+  // REMOVED: mountPath was removed as it's transient and detected at runtime.
 }
 
 class Rabbis extends Table {

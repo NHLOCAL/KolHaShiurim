@@ -223,6 +223,7 @@ class _RabbisManagementTab extends ConsumerWidget {
               ),
               TextFormField(
                 controller: pathController,
+                readOnly: true, // Make it read-only to force using the button
                 decoration: InputDecoration(
                   labelText: 'נתיב יעד (במחשב)',
                   suffixIcon: IconButton(
@@ -245,7 +246,8 @@ class _RabbisManagementTab extends ConsumerWidget {
           FilledButton(
             onPressed: () async {
               if (formKey.currentState!.validate()) {
-                final companion = drift.RabbisCompanion(
+                // FIXED: Removed the incorrect 'drift.' prefix.
+                final companion = RabbisCompanion(
                   name: drift.Value(nameController.text),
                   targetPath: drift.Value(pathController.text),
                 );
@@ -315,7 +317,6 @@ class _DevicesManagementTab extends ConsumerWidget {
       context: context,
       barrierDismissible: false,
       builder: (context) {
-        // Use a stateful builder to manage the dropdown state
         return StatefulBuilder(
           builder: (context, setState) {
             final usersAsync = ref.watch(allUsersProvider);
@@ -359,7 +360,8 @@ class _DevicesManagementTab extends ConsumerWidget {
                 FilledButton(
                   onPressed: () async {
                     if (formKey.currentState!.validate()) {
-                      final companion = drift.DevicesCompanion(
+                      // FIXED: Removed the incorrect 'drift.' prefix.
+                      final companion = DevicesCompanion(
                         serialNumber: drift.Value(serialController.text),
                         sourcePath: drift.Value(sourcePathController.text),
                         userId: drift.Value(selectedUserId!),

@@ -8,7 +8,7 @@ import 'package:path/path.dart' as p;
 part 'tables.dart';
 part 'database.g.dart';
 
-// CHANGED: The `Devices` table in the list no longer contains `mountPath`.
+// The list of tables for the database.
 @DriftDatabase(tables: [Users, Devices, Rabbis, UserRabbiPermissions, Transfers])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
@@ -25,7 +25,6 @@ class AppDatabase extends _$AppDatabase {
 
   // --- Device Queries ---
   Stream<List<Device>> watchAllDevices() => select(devices).watch();
-  // CHANGED: Query now joins with users to get user name for display in admin panel.
   Stream<List<DeviceWithUser>> watchAllDevicesWithUser() {
     final query = select(devices).join([
       innerJoin(users, users.id.equalsExp(devices.userId)),
@@ -77,7 +76,7 @@ class AppDatabase extends _$AppDatabase {
   Future<int> logTransfer(TransfersCompanion transfer) => into(transfers).insert(transfer);
 }
 
-// NEW: Helper class to combine Device and User data for the admin panel.
+// Helper class to combine Device and User data for the admin panel.
 class DeviceWithUser {
   final Device device;
   final User user;
