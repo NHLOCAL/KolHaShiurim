@@ -5,32 +5,38 @@ import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 import 'package:torah_shiurim_transfer/core/database/database.dart';
 import 'package:torah_shiurim_transfer/core/providers/providers.dart';
+import 'package:drift/drift.dart'; // ודא שה-import הזה קיים
 
 final _sourceFilesProvider = FutureProvider.autoDispose<List<File>>((ref) async {
   final authState = ref.watch(authStateProvider);
   final fileService = ref.watch(fileServiceProvider);
 
-  if (authState.isUser) {
-    final device = (authState as _User).device;
-    final sourcePath = p.join(device.mountPath, device.sourcePath);
-    return fileService.getAudioFiles(sourcePath);
-  }
-  return [];
+  // שימוש ב-map כדי לגשת למצב בבטחה
+  return authState.map(
+    loggedOut: (_) => [],
+    admin: (_) => [],
+    user: (userState) async { // userState הוא מסוג _User
+      final device = userState.device;
+      final sourcePath = p.join(device.mountPath, device.sourcePath);
+      return fileService.getAudioFiles(sourcePath);
+    },
+  );
 });
 
 final _allowedRabbisProvider = StreamProvider.autoDispose<List<Rabbi>>((ref) {
   final authState = ref.watch(authStateProvider);
   final db = ref.watch(databaseProvider);
 
-  if (authState.isUser) {
-    return db.watchPermissionsForUser((authState as _User).user.id);
-  }
-  return Stream.value([]);
+  // שימוש ב-map כדי לגשת למצב בבטחה
+  return authState.map(
+    loggedOut: (_) => Stream.value([]),
+    admin: (_) => Stream.value([]),
+    user: (userState) => db.watchPermissionsForUser(userState.user.id),
+  );
 });
 
 class UserTransferScreen extends ConsumerStatefulWidget {
   const UserTransferScreen({super.key});
-
   @override
   ConsumerState<UserTransferScreen> createState() => _UserTransferScreenState();
 }
@@ -52,7 +58,6 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
 
   Future<void> _copyFile() async {
     if (_selectedFile == null || _selectedRabbi == null) return;
-
     setState(() => _isCopying = true);
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     final authState = ref.read(authStateProvider);
@@ -60,32 +65,32 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
     try {
       final newFileName = _getNewFileName();
       await ref.read(fileServiceProvider).copyFile(
-        sourceFile: _selectedFile!,
-        destinationDirectory: _selectedRabbi!.targetPath,
-        newFileName: newFileName,
+            sourceFile: _selectedFile!,
+            destinationDirectory: _selectedRabbi!.targetPath,
+            newFileName: newFileName,
+          );
+      
+      // שימוש ב-whenOrNull כדי לבצע פעולה רק במצב user
+      await authState.whenOrNull(
+        user: (userState) async {
+          await ref.read(databaseProvider).logTransfer(
+                TransfersCompanion.insert(
+                  userId: Value(userState.user.id), // גישה בטוחה
+                  sourceFile: Value(_selectedFile!.path),
+                  destinationFile: Value(p.join(_selectedRabbi!.targetPath, newFileName)),
+                  timestamp: Value(DateTime.now()),
+                ),
+              );
+        },
       );
-
-      // Log the transfer
-      if (authState.isUser) {
-        await ref.read(databaseProvider).logTransfer(
-          TransfersCompanion.insert(
-            userId: Value((authState as _User).user.id),
-            sourceFile: Value(_selectedFile!.path),
-            destinationFile: Value(p.join(_selectedRabbi!.targetPath, newFileName)),
-            timestamp: Value(DateTime.now()),
-          ),
-        );
-      }
 
       scaffoldMessenger.showSnackBar(
-        SnackBar(content: Text('הקובץ הועתק בהצלחה!'), backgroundColor: Colors.green),
+        const SnackBar(content: Text('הקובץ הועתק בהצלחה!'), backgroundColor: Colors.green),
       );
-      // Reset form
       setState(() {
         _selectedFile = null;
         _topicController.clear();
       });
-
     } catch (e) {
       scaffoldMessenger.showSnackBar(
         SnackBar(content: Text('שגיאה בהעתקת הקובץ: $e'), backgroundColor: Colors.red),
@@ -99,7 +104,6 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
   Widget build(BuildContext context) {
     final sourceFilesAsync = ref.watch(_sourceFilesProvider);
     final allowedRabbisAsync = ref.watch(_allowedRabbisProvider);
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('העברת שיעורים'),
@@ -113,7 +117,6 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
       ),
       body: Row(
         children: [
-          // Left Pane: Source Files
           Expanded(
             flex: 2,
             child: Card(
@@ -139,7 +142,6 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
               ),
             ),
           ),
-          // Right Pane: Transfer Details
           Expanded(
             flex: 3,
             child: Card(
@@ -157,7 +159,6 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
                         const Divider(),
                         if (_selectedFile != null) Text("קובץ מקור: ${p.basename(_selectedFile!.path)}"),
                         const SizedBox(height: 20),
-                        // Rabbi Selector
                         allowedRabbisAsync.when(
                           data: (rabbis) => DropdownButtonFormField<Rabbi>(
                             value: _selectedRabbi,
@@ -169,14 +170,12 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
                           error: (err, stack) => Text('שגיאה: $err'),
                         ),
                         const SizedBox(height: 16),
-                        // Topic
                         TextField(
                           controller: _topicController,
                           decoration: const InputDecoration(labelText: 'נושא השיעור', border: OutlineInputBorder()),
-                           onChanged: (_) => setState((){}), // to rebuild file name preview
+                           onChanged: (_) => setState((){}),
                         ),
                         const SizedBox(height: 16),
-                        // Date
                         ListTile(
                           title: Text("תאריך השיעור: ${DateFormat('dd/MM/yyyy').format(_selectedDate)}"),
                           trailing: const Icon(Icons.calendar_today),
@@ -193,11 +192,9 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
                           },
                         ),
                         const Spacer(),
-                        // Preview
                         Text('שם קובץ היעד:', style: Theme.of(context).textTheme.titleSmall),
                         Text(_getNewFileName(), style: Theme.of(context).textTheme.bodyMedium, overflow: TextOverflow.ellipsis),
                         const SizedBox(height: 16),
-                        // Copy Button
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton.icon(

@@ -3,6 +3,8 @@ import 'package:torah_shiurim_transfer/core/database/database.dart';
 import 'package:torah_shiurim_transfer/models/app_user.dart';
 import 'package:torah_shiurim_transfer/services/device_service.dart';
 import 'package:torah_shiurim_transfer/services/file_service.dart';
+import 'package:drift/drift.dart';
+
 
 // --- SERVICE PROVIDERS ---
 final databaseProvider = Provider<AppDatabase>((ref) => AppDatabase());
