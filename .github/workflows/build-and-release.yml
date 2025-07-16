@@ -13,10 +13,6 @@ jobs:
     name: Build Windows Executable
     runs-on: windows-latest
 
-    defaults:
-      run:
-        working-directory: torah_shiurim_transfer
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -41,19 +37,24 @@ jobs:
 
       - name: Install dependencies
         run: flutter pub get
+        working-directory: torah_shiurim_transfer
 
       - name: Generate code (build_runner)
         run: flutter pub run build_runner build --delete-conflicting-outputs
+        working-directory: torah_shiurim_transfer
 
       - name: Build Windows executable
         run: flutter build windows --release
+        working-directory: torah_shiurim_transfer
 
-      # --- התיקון כאן ---
+      - name: Verify generated_config.cmake exists
+        run: dir windows/flutter
+        working-directory: torah_shiurim_transfer
+
       - name: Package Release with PowerShell
         run: |
           Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath shiur-bot-windows-${{ github.ref_name }}.zip -Force
-
-
+        working-directory: torah_shiurim_transfer
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
