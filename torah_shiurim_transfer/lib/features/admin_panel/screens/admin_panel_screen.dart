@@ -403,31 +403,6 @@ class _DevicesManagementTab extends ConsumerWidget {
     );
   }
 
-  Future<ConnectedDeviceInfo?> _selectDrive(BuildContext context) async {
-    final devices = await DeviceService().watchConnectedDevices().first;
-    if (devices.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("לא נמצאו כוננים חיצוניים.")),
-      );
-      return null;
-    }
-
-    return await showDialog<ConnectedDeviceInfo>(
-      context: context,
-      builder: (context) {
-        return SimpleDialog(
-          title: const Text('בחר כונן'),
-          children: devices.map((device) {
-            return SimpleDialogOption(
-              onPressed: () => Navigator.pop(context, device),
-              child: Text(device.mountPath),
-            );
-          }).toList(),
-        );
-      },
-    );
-  }
-
   void _showDeviceDialog(BuildContext context, WidgetRef ref,
       {Device? device}) {
     final serialController = TextEditingController(text: device?.serialNumber);
@@ -452,36 +427,80 @@ class _DevicesManagementTab extends ConsumerWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     ElevatedButton.icon(
-                      icon: const Icon(Icons.drive_folder_upload),
-                      label: const Text("בחר כונן ותיקייה"),
+                      icon: const Icon(Icons.folder_open),
+                      label: const Text("בחר תיקיית מקור"),
                       onPressed: () async {
-                        final drive = await _selectDrive(context);
-                        if (drive == null) return;
+                        // 1. Let user pick a directory.
+                        final selectedPath =
+                            await FilePicker.platform.getDirectoryPath(
+                          lockParentWindow: true,
+                          dialogTitle: 'בחר תיקיית מקור מההתקן החיצוני',
+                        );
+                        if (selectedPath == null) return; // User canceled.
 
-                        final serialNumber = drive.serialNumber;
-                        final sourcePath = await FilePicker.platform
-                            .getDirectoryPath(
-                                initialDirectory: drive.mountPath);
-                        if (sourcePath == null) return;
+                        // 2. Find the drive that contains this path.
+                        final devices = await DeviceService()
+                            .watchConnectedDevices()
+                            .first;
+                        if (devices.isEmpty) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                  content: Text("לא נמצאו כוננים חיצוניים.")),
+                            );
+                          }
+                          return;
+                        }
 
+                        ConnectedDeviceInfo? drive;
+                        try {
+                          drive = devices.firstWhere((d) =>
+                              selectedPath.startsWith(d.mountPath));
+                        } catch (e) {
+                          drive = null;
+                        }
+
+                        if (drive == null) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                  content: Text(
+                                      "התיקיה שנבחרה אינה נמצאת על כונן חיצוני מזוהה.")),
+                            );
+                          }
+                          return;
+                        }
+
+                        // 3. Calculate relative path.
+                        String relativePath = selectedPath
+                            .substring(drive.mountPath.length)
+                            .trim();
+                        if (relativePath.startsWith(r'\')) {
+                          relativePath = relativePath.substring(1);
+                        }
+
+                        // 4. Update controllers.
                         setState(() {
-                          serialController.text = serialNumber;
-                          sourcePathController.text = sourcePath;
+                          serialController.text = drive!.serialNumber;
+                          sourcePathController.text = relativePath;
                         });
                       },
                     ),
                     TextFormField(
                       controller: serialController,
-                      decoration:
-                          const InputDecoration(labelText: 'מספר סידורי'),
+                      readOnly: true, // Serial should be read-only
+                      decoration: const InputDecoration(
+                        labelText: 'מספר סידורי (מזוהה אוטומטית)',
+                      ),
                       validator: (v) => v!.isEmpty ? 'שדה חובה' : null,
                     ),
                     TextFormField(
                       controller: sourcePathController,
                       decoration: const InputDecoration(
-                          labelText: 'נתיב מקור (בהתקן)',
-                          hintText: 'לדוגמה: voice/'),
-                      validator: (v) => v!.isEmpty ? 'שדה חובה' : null,
+                        labelText: 'נתיב מקור (יחסית לכונן)',
+                        hintText: 'לדוגמה: records (או ריק לשורש הכונן)',
+                      ),
+                      // Validator is now optional
                     ),
                     usersAsync.when(
                       data: (users) => DropdownButtonFormField<int>(
@@ -509,26 +528,27 @@ class _DevicesManagementTab extends ConsumerWidget {
                   onPressed: () async {
                     if (formKey.currentState!.validate()) {
                       final serialNumber = serialController.text;
+                      final currentId = device?.id;
 
-                      // בדיקה אם המכשיר כבר קיים
-                      if (device == null) {
-                        // בודקים רק בהוספת מכשיר חדש
-                        final existingDevices =
-                            await ref.read(allDevicesProvider.future);
-                        final exists = existingDevices
-                            .any((d) => d.device.serialNumber == serialNumber);
+                      // Check if the serial number is already used by ANOTHER device.
+                      final allDevices =
+                          await ref.read(allDevicesProvider.future);
+                      final conflictingDevice = allDevices.where((d) {
+                        return d.device.serialNumber == serialNumber &&
+                            d.device.id != currentId;
+                      });
 
-                        if (exists) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content:
-                                    Text('כבר קיים מכשיר עם מספר סידורי זה'),
-                              ),
-                            );
-                          }
-                          return;
+                      if (conflictingDevice.isNotEmpty) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                  'שגיאה: המספר הסידורי כבר משויך להתקן אחר.'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
                         }
+                        return; // Stop execution
                       }
 
                       final companion = DevicesCompanion(
@@ -536,16 +556,28 @@ class _DevicesManagementTab extends ConsumerWidget {
                         sourcePath: drift.Value(sourcePathController.text),
                         userId: drift.Value(selectedUserId!),
                       );
-                      if (device == null) {
-                        await ref
-                            .read(databaseProvider)
-                            .insertDevice(companion);
-                      } else {
-                        await ref.read(databaseProvider).updateDevice(
-                            companion.copyWith(id: drift.Value(device.id)));
-                      }
-                      if (context.mounted) {
-                        Navigator.of(context).pop();
+
+                      try {
+                        if (device == null) {
+                          await ref
+                              .read(databaseProvider)
+                              .insertDevice(companion);
+                        } else {
+                          await ref.read(databaseProvider).updateDevice(
+                              companion.copyWith(id: drift.Value(device.id)));
+                        }
+                        if (context.mounted) {
+                          Navigator.of(context).pop();
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('שגיאה בשמירה: $e'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
                       }
                     }
                   },

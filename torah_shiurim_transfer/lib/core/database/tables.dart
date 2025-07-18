@@ -14,7 +14,7 @@ class Devices extends Table {
   // This now stores the REAL hardware/volume serial number.
   TextColumn get serialNumber => text().unique()();
   // This is the RELATIVE source path on the device, e.g., "records/" or "voice/".
-  TextColumn get sourcePath => text()();
+  TextColumn get sourcePath => text().nullable()();
   // REMOVED: mountPath was removed as it's transient and detected at runtime.
 }
 
