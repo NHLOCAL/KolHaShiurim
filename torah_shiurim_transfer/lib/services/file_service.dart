@@ -9,7 +9,14 @@ class FileService {
     }
 
     final List<File> audioFiles = [];
-    final supportedExtensions = ['.mp3', '.wav', '.m4a', '.flac'];
+    final supportedExtensions = [
+      // Standard
+      '.mp3', '.wav', '.m4a', '.flac', '.aac', '.ogg', '.wma',
+      // Apple
+      '.aiff', '.alac',
+      // Other
+      '.amr', '.opus', '.dsd', '.pcm',
+    ];
 
     await for (final entity in dir.list()) {
       if (entity is File) {
