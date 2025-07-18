@@ -106,7 +106,8 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
   @override
   void initState() {
     super.initState();
-    _initialPermissionsFuture = ref.read(databaseProvider).getPermissionIdsForUser(widget.user.id);
+    _initialPermissionsFuture =
+        ref.read(databaseProvider).getPermissionIdsForUser(widget.user.id);
     _initialPermissionsFuture.then((ids) {
       if (mounted) {
         setState(() {
@@ -119,25 +120,24 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final allRabbisAsync = ref.watch(allRabbisProvider);
+    final allRabbis = ref.watch(allRabbisProvider);
     return AlertDialog(
       title: Text('עריכת הרשאות עבור ${widget.user.name}'),
       content: SizedBox(
         width: double.maxFinite,
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())
-            : allRabbisAsync.when(
-                data: (allRabbis) => ListView.builder(
+            : allRabbis.when(
+                data: (rabbis) => ListView(
                   shrinkWrap: true,
-                  itemCount: allRabbis.length,
-                  itemBuilder: (context, index) {
-                    final rabbi = allRabbis[index];
+                  children: rabbis.map<Widget>((rabbi) {
+                    final isSelected = _selectedRabbiIds.contains(rabbi.id);
                     return CheckboxListTile(
+                      value: isSelected,
                       title: Text(rabbi.name),
-                      value: _selectedRabbiIds.contains(rabbi.id),
-                      onChanged: (bool? value) {
+                      onChanged: (checked) {
                         setState(() {
-                          if (value == true) {
+                          if (checked == true) {
                             _selectedRabbiIds.add(rabbi.id);
                           } else {
                             _selectedRabbiIds.remove(rabbi.id);
@@ -145,20 +145,32 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
                         });
                       },
                     );
-                  },
+                  }).toList(),
                 ),
                 loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, st) => Text("Error: $e"),
+                error: (e, st) => Center(child: Text('שגיאה בטעינת רבנים: $e')),
               ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('ביטול')),
-        FilledButton(
-          onPressed: () async {
-            await ref.read(databaseProvider).setPermissionsForUser(widget.user.id, _selectedRabbiIds.toList());
-            Navigator.of(context).pop();
-          },
-          child: const Text('שמירה'),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('ביטול'),
+        ),
+        ElevatedButton(
+          onPressed: _isLoading
+              ? null
+              : () async {
+                  setState(() => _isLoading = true);
+                  await ref.read(databaseProvider).setPermissionsForUser(
+                        widget.user.id,
+                        _selectedRabbiIds.toList(),
+                      );
+                  if (mounted) {
+                    setState(() => _isLoading = false);
+                    Navigator.of(context).pop();
+                  }
+                },
+          child: const Text('שמור'),
         ),
       ],
     );
@@ -229,7 +241,8 @@ class _RabbisManagementTab extends ConsumerWidget {
                   suffixIcon: IconButton(
                     icon: const Icon(Icons.folder_open),
                     onPressed: () async {
-                      String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
+                      String? selectedDirectory =
+                          await FilePicker.platform.getDirectoryPath();
                       if (selectedDirectory != null) {
                         pathController.text = selectedDirectory;
                       }
@@ -242,7 +255,9 @@ class _RabbisManagementTab extends ConsumerWidget {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('ביטול')),
+          TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('ביטול')),
           FilledButton(
             onPressed: () async {
               if (formKey.currentState!.validate()) {
@@ -254,7 +269,8 @@ class _RabbisManagementTab extends ConsumerWidget {
                 if (rabbi == null) {
                   await ref.read(databaseProvider).insertRabbi(companion);
                 } else {
-                  await ref.read(databaseProvider).updateRabbi(companion.copyWith(id: drift.Value(rabbi.id)));
+                  await ref.read(databaseProvider).updateRabbi(
+                      companion.copyWith(id: drift.Value(rabbi.id)));
                 }
                 Navigator.of(context).pop();
               }
@@ -289,7 +305,8 @@ class _DevicesManagementTab extends ConsumerWidget {
             return ListTile(
               leading: const Icon(Icons.memory),
               title: Text('התקן: ${device.serialNumber}'),
-              subtitle: Text('משוייך ל: ${user.name}\nנתיב מקור: ${device.sourcePath}'),
+              subtitle: Text(
+                  'משוייך ל: ${user.name}\nנתיב מקור: ${device.sourcePath}'),
               isThreeLine: true,
               trailing: IconButton(
                 icon: const Icon(Icons.delete_outline),
@@ -307,9 +324,11 @@ class _DevicesManagementTab extends ConsumerWidget {
     );
   }
 
-  void _showDeviceDialog(BuildContext context, WidgetRef ref, {Device? device}) {
+  void _showDeviceDialog(BuildContext context, WidgetRef ref,
+      {Device? device}) {
     final serialController = TextEditingController(text: device?.serialNumber);
-    final sourcePathController = TextEditingController(text: device?.sourcePath);
+    final sourcePathController =
+        TextEditingController(text: device?.sourcePath);
     int? selectedUserId = device?.userId;
     final formKey = GlobalKey<FormState>();
 
@@ -330,12 +349,15 @@ class _DevicesManagementTab extends ConsumerWidget {
                   children: [
                     TextFormField(
                       controller: serialController,
-                      decoration: const InputDecoration(labelText: 'מספר סידורי'),
+                      decoration:
+                          const InputDecoration(labelText: 'מספר סידורי'),
                       validator: (v) => v!.isEmpty ? 'שדה חובה' : null,
                     ),
                     TextFormField(
                       controller: sourcePathController,
-                      decoration: const InputDecoration(labelText: 'נתיב מקור (בהתקן)', hintText: 'לדוגמה: voice/'),
+                      decoration: const InputDecoration(
+                          labelText: 'נתיב מקור (בהתקן)',
+                          hintText: 'לדוגמה: voice/'),
                       validator: (v) => v!.isEmpty ? 'שדה חובה' : null,
                     ),
                     usersAsync.when(
@@ -344,7 +366,8 @@ class _DevicesManagementTab extends ConsumerWidget {
                         hint: const Text('בחר משתמש לשיוך'),
                         items: users
                             .where((u) => !u.isAdmin)
-                            .map((u) => DropdownMenuItem(value: u.id, child: Text(u.name)))
+                            .map((u) => DropdownMenuItem(
+                                value: u.id, child: Text(u.name)))
                             .toList(),
                         onChanged: (id) => setState(() => selectedUserId = id),
                         validator: (id) => id == null ? 'שדה חובה' : null,
@@ -356,7 +379,9 @@ class _DevicesManagementTab extends ConsumerWidget {
                 ),
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('ביטול')),
+                TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('ביטול')),
                 FilledButton(
                   onPressed: () async {
                     if (formKey.currentState!.validate()) {
@@ -367,9 +392,12 @@ class _DevicesManagementTab extends ConsumerWidget {
                         userId: drift.Value(selectedUserId!),
                       );
                       if (device == null) {
-                        await ref.read(databaseProvider).insertDevice(companion);
+                        await ref
+                            .read(databaseProvider)
+                            .insertDevice(companion);
                       } else {
-                        await ref.read(databaseProvider).updateDevice(companion.copyWith(id: drift.Value(device.id)));
+                        await ref.read(databaseProvider).updateDevice(
+                            companion.copyWith(id: drift.Value(device.id)));
                       }
                       Navigator.of(context).pop();
                     }
