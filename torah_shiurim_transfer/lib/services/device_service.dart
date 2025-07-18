@@ -10,11 +10,13 @@ class DeviceService {
         .distinct((prev, next) => _areDeviceListsEqual(prev, next));
   }
 
-  bool _areDeviceListsEqual(List<ConnectedDeviceInfo> a, List<ConnectedDeviceInfo> b) {
+  bool _areDeviceListsEqual(
+      List<ConnectedDeviceInfo> a, List<ConnectedDeviceInfo> b) {
     if (a.length != b.length) return false;
     final aSerials = a.map((d) => d.serialNumber).toSet();
     final bSerials = b.map((d) => d.serialNumber).toSet();
-    return aSerials.difference(bSerials).isEmpty && bSerials.difference(aSerials).isEmpty;
+    return aSerials.difference(bSerials).isEmpty &&
+        bSerials.difference(aSerials).isEmpty;
   }
 
   Future<List<ConnectedDeviceInfo>> _getConnectedVolumes() async {
@@ -22,10 +24,12 @@ class DeviceService {
     if (Platform.isWindows) {
       try {
         // MODIFIED: Query all logical disks, not just removable ones.
-        final result = await Process.run('wmic', ['logicaldisk', 'get', 'name,volumeserialnumber']);
+        final result = await Process.run(
+            'wmic', ['logicaldisk', 'get', 'name,volumeserialnumber']);
         final output = result.stdout.toString();
         // MODIFIED: Improved parsing to be more robust.
-        final lines = output.split('\n').where((line) => line.trim().isNotEmpty).skip(1);
+        final lines =
+            output.split('\n').where((line) => line.trim().isNotEmpty).skip(1);
 
         for (final line in lines) {
           // Trim the line and then look for the position of the first space.
@@ -39,19 +43,22 @@ class DeviceService {
             final serial = trimmedLine.substring(spaceIndex + 1).trim();
 
             if (driveLetter.isNotEmpty && serial.isNotEmpty) {
-               devices.add(ConnectedDeviceInfo(mountPath: '$driveLetter', serialNumber: serial));
+              devices.add(ConnectedDeviceInfo(
+                  mountPath: driveLetter, serialNumber: serial));
             }
           }
         }
       } catch (e) {
         print("Error getting drives on Windows: $e");
       }
-    } else { // macOS / Linux
+    } else {
+      // macOS / Linux
       final dir = Directory('/Volumes');
       if (await dir.exists()) {
         await for (final entity in dir.list()) {
           if (entity is Directory) {
-            devices.add(ConnectedDeviceInfo(mountPath: entity.path, serialNumber: entity.path));
+            devices.add(ConnectedDeviceInfo(
+                mountPath: entity.path, serialNumber: entity.path));
           }
         }
       }
