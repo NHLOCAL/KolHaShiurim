@@ -1,12 +1,11 @@
-import 'dart:io';
-
 import 'package:drift/drift.dart' as drift;
-import 'package:disk_space/disk_space.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:torah_shiurim_transfer/core/database/database.dart';
 import 'package:torah_shiurim_transfer/core/providers/providers.dart';
+import 'package:torah_shiurim_transfer/models/device_info.dart';
+import 'package:torah_shiurim_transfer/services/device_service.dart';
 
 class AdminPanelScreen extends ConsumerWidget {
   const AdminPanelScreen({super.key});
@@ -150,9 +149,7 @@ class _UsersManagementTab extends ConsumerWidget {
                         isAdmin: drift.Value(isAdmin),
                       );
                       if (user == null) {
-                        await ref
-                            .read(databaseProvider)
-                            .insertUser(companion);
+                        await ref.read(databaseProvider).insertUser(companion);
                       } else {
                         await ref.read(databaseProvider).updateUser(
                               companion.copyWith(id: drift.Value(user.id)),
@@ -406,54 +403,29 @@ class _DevicesManagementTab extends ConsumerWidget {
     );
   }
 
-  Future<Disk?> _selectDrive(BuildContext context) async {
-    final drives = await DiskSpace.getDrives();
-    if (drives == null) {
+  Future<ConnectedDeviceInfo?> _selectDrive(BuildContext context) async {
+    final devices = await DeviceService().watchConnectedDevices().first;
+    if (devices.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("לא נמצאו כוננים חיצוניים.")),
       );
       return null;
     }
 
-    return await showDialog<Disk>(
+    return await showDialog<ConnectedDeviceInfo>(
       context: context,
       builder: (context) {
         return SimpleDialog(
           title: const Text('בחר כונן'),
-          children: drives.map((drive) {
+          children: devices.map((device) {
             return SimpleDialogOption(
-              onPressed: () => Navigator.pop(context, drive),
-              child: Text(drive.path),
+              onPressed: () => Navigator.pop(context, device),
+              child: Text(device.mountPath),
             );
           }).toList(),
         );
       },
     );
-  }
-
-  Future<String?> getVolumeSerialNumber(String driveLetter) async {
-    if (!Platform.isWindows) {
-      // Handle non-Windows platforms if necessary
-      return null;
-    }
-    try {
-      final result = await Process.run('vol', [driveLetter]);
-      if (result.exitCode == 0) {
-        final output = result.stdout.toString();
-        final lines = output.split('\n');
-        for (final line in lines) {
-          if (line.contains("Serial Number")) {
-            final parts = line.split('is ');
-            if (parts.length > 1) {
-              return parts[1].trim();
-            }
-          }
-        }
-      }
-    } catch (e) {
-      // Handle exceptions
-    }
-    return null;
   }
 
   void _showDeviceDialog(BuildContext context, WidgetRef ref,
@@ -486,18 +458,10 @@ class _DevicesManagementTab extends ConsumerWidget {
                         final drive = await _selectDrive(context);
                         if (drive == null) return;
 
-                        final serialNumber =
-                            await getVolumeSerialNumber(drive.path);
-                        if (serialNumber == null) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content: Text("לא ניתן לקבל מספר סידורי.")),
-                          );
-                          return;
-                        }
-
+                        final serialNumber = drive.serialNumber;
                         final sourcePath = await FilePicker.platform
-                            .getDirectoryPath(initialDirectory: drive.path);
+                            .getDirectoryPath(
+                                initialDirectory: drive.mountPath);
                         if (sourcePath == null) return;
 
                         setState(() {
@@ -544,8 +508,31 @@ class _DevicesManagementTab extends ConsumerWidget {
                 FilledButton(
                   onPressed: () async {
                     if (formKey.currentState!.validate()) {
+                      final serialNumber = serialController.text;
+
+                      // בדיקה אם המכשיר כבר קיים
+                      if (device == null) {
+                        // בודקים רק בהוספת מכשיר חדש
+                        final existingDevices =
+                            await ref.read(allDevicesProvider.future);
+                        final exists = existingDevices
+                            .any((d) => d.device.serialNumber == serialNumber);
+
+                        if (exists) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content:
+                                    Text('כבר קיים מכשיר עם מספר סידורי זה'),
+                              ),
+                            );
+                          }
+                          return;
+                        }
+                      }
+
                       final companion = DevicesCompanion(
-                        serialNumber: drift.Value(serialController.text),
+                        serialNumber: drift.Value(serialNumber),
                         sourcePath: drift.Value(sourcePathController.text),
                         userId: drift.Value(selectedUserId!),
                       );
@@ -557,7 +544,9 @@ class _DevicesManagementTab extends ConsumerWidget {
                         await ref.read(databaseProvider).updateDevice(
                             companion.copyWith(id: drift.Value(device.id)));
                       }
-                      Navigator.of(context).pop();
+                      if (context.mounted) {
+                        Navigator.of(context).pop();
+                      }
                     }
                   },
                   child: const Text('שמירה'),
