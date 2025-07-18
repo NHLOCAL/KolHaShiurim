@@ -1,15 +1,11 @@
 cmake_minimum_required(VERSION 3.14)
 project(runner LANGUAGES CXX)
 
-
-# Find the flutter managed directory.
-get_filename_component(FLUTTER_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../flutter" ABSOLUTE)
-include(${FLUTTER_ROOT}/generated_config.cmake)
-# === END OF CRITICAL FIX ===
-
-
-# Define the application target.
-# Your original `add_executable` block is preserved.
+# Define the application target. To change its name, change BINARY_NAME in the
+# top-level CMakeLists.txt, not the value here, or `flutter run` will no longer
+# work.
+#
+# Any new source files that you add to the application should be added here.
 add_executable(${BINARY_NAME} WIN32
   "flutter_window.cpp"
   "main.cpp"
@@ -20,7 +16,8 @@ add_executable(${BINARY_NAME} WIN32
   "runner.exe.manifest"
 )
 
-# Apply the standard set of build settings.
+# Apply the standard set of build settings. This can be removed for applications
+# that need different build settings.
 apply_standard_settings(${BINARY_NAME})
 
 # Add preprocessor definitions for the build version.
@@ -33,36 +30,11 @@ target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION_BUILD=${FLUTT
 # Disable Windows macros that collide with C++ standard library functions.
 target_compile_definitions(${BINARY_NAME} PRIVATE "NOMINMAX")
 
-# Add dependency libraries and include directories.
+# Add dependency libraries and include directories. Add any application-specific
+# dependencies here.
 target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app)
 target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib")
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
-# Ensure the Flutter tool builds assets before this target.
+# Run the Flutter tool portions of the build. This must not be removed.
 add_dependencies(${BINARY_NAME} flutter_assemble)
-
-
-# === START OF ROBUST FILE COPY COMMAND ===
-# This custom command runs *after* the build and copies all necessary files
-# to the final output directory. Because we included generated_config.cmake
-# above, the variables FLUTTER_..._PATH are now correctly defined.
-
-add_custom_command(
-  TARGET ${BINARY_NAME} POST_BUILD
-  # Create the data directory if it doesn't exist.
-  COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/runner/${CMAKE_BUILD_TYPE}/data"
-  # Copy the ICU data file.
-  COMMAND ${CMAKE_COMMAND} -E copy
-          "${FLUTTER_ICU_DATA_PATH}"
-          "${CMAKE_BINARY_DIR}/runner/${CMAKE_BUILD_TYPE}/data/icudtl.dat"
-  # Copy the main Flutter DLL.
-  COMMAND ${CMAKE_COMMAND} -E copy
-          "${FLUTTER_WINDOWS_DLL_PATH}"
-          "${CMAKE_BINARY_DIR}/runner/${CMAKE_BUILD_TYPE}/"
-  # Copy the entire assets directory.
-  COMMAND ${CMAKE_COMMAND} -E copy_directory
-          "${FLUTTER_ASSETS_DIR}"
-          "${CMAKE_BINARY_DIR}/runner/${CMAKE_BUILD_TYPE}/data/flutter_assets"
-  COMMENT "Copying Flutter necessary assets."
-)
-# === END OF ROBUST FILE COPY COMMAND ===
