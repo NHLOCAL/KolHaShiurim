@@ -18,6 +18,7 @@ dependencies:
   intl: ^0.19.0
   # הוספת התלות החסרה
   freezed_annotation: ^2.4.1
+  disk_space: ^0.2.1
 
 dev_dependencies:
   flutter_test:

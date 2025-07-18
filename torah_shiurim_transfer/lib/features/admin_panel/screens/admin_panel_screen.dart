@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:drift/drift.dart' as drift;
+import 'package:disk_space/disk_space.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -403,6 +406,56 @@ class _DevicesManagementTab extends ConsumerWidget {
     );
   }
 
+  Future<Disk?> _selectDrive(BuildContext context) async {
+    final drives = await DiskSpace.getDrives();
+    if (drives == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("לא נמצאו כוננים חיצוניים.")),
+      );
+      return null;
+    }
+
+    return await showDialog<Disk>(
+      context: context,
+      builder: (context) {
+        return SimpleDialog(
+          title: const Text('בחר כונן'),
+          children: drives.map((drive) {
+            return SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, drive),
+              child: Text(drive.path),
+            );
+          }).toList(),
+        );
+      },
+    );
+  }
+
+  Future<String?> getVolumeSerialNumber(String driveLetter) async {
+    if (!Platform.isWindows) {
+      // Handle non-Windows platforms if necessary
+      return null;
+    }
+    try {
+      final result = await Process.run('vol', [driveLetter]);
+      if (result.exitCode == 0) {
+        final output = result.stdout.toString();
+        final lines = output.split('\n');
+        for (final line in lines) {
+          if (line.contains("Serial Number")) {
+            final parts = line.split('is ');
+            if (parts.length > 1) {
+              return parts[1].trim();
+            }
+          }
+        }
+      }
+    } catch (e) {
+      // Handle exceptions
+    }
+    return null;
+  }
+
   void _showDeviceDialog(BuildContext context, WidgetRef ref,
       {Device? device}) {
     final serialController = TextEditingController(text: device?.serialNumber);
@@ -426,6 +479,33 @@ class _DevicesManagementTab extends ConsumerWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.drive_folder_upload),
+                      label: const Text("בחר כונן ותיקייה"),
+                      onPressed: () async {
+                        final drive = await _selectDrive(context);
+                        if (drive == null) return;
+
+                        final serialNumber =
+                            await getVolumeSerialNumber(drive.path);
+                        if (serialNumber == null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text("לא ניתן לקבל מספר סידורי.")),
+                          );
+                          return;
+                        }
+
+                        final sourcePath = await FilePicker.platform
+                            .getDirectoryPath(initialDirectory: drive.path);
+                        if (sourcePath == null) return;
+
+                        setState(() {
+                          serialController.text = serialNumber;
+                          sourcePathController.text = sourcePath;
+                        });
+                      },
+                    ),
                     TextFormField(
                       controller: serialController,
                       decoration:
@@ -464,7 +544,6 @@ class _DevicesManagementTab extends ConsumerWidget {
                 FilledButton(
                   onPressed: () async {
                     if (formKey.currentState!.validate()) {
-                      // FIXED: Removed the incorrect 'drift.' prefix.
                       final companion = DevicesCompanion(
                         serialNumber: drift.Value(serialController.text),
                         sourcePath: drift.Value(sourcePathController.text),
