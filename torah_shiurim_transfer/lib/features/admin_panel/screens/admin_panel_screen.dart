@@ -49,36 +49,45 @@ class _UsersManagementTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final usersAsync = ref.watch(allUsersProvider);
-    return usersAsync.when(
-      data: (users) => ListView.builder(
-        itemCount: users.length,
-        itemBuilder: (context, index) {
-          final user = users[index];
-          return ListTile(
-            leading: Icon(user.isAdmin ? Icons.shield_outlined : Icons.person),
-            title: Text(user.name),
-            subtitle: Text(user.isAdmin ? 'מנהל' : 'משתמש רגיל'),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (!user.isAdmin)
-                  TextButton(
-                    child: const Text('הרשאות'),
-                    onPressed: () => _showPermissionsDialog(context, ref, user),
-                  ),
-                IconButton(
-                  icon: const Icon(Icons.delete_outline),
-                  onPressed: () async {
-                    await ref.read(databaseProvider).deleteUser(user.id);
-                  },
-                ),
-              ],
-            ),
-          );
-        },
+    return Scaffold(
+      floatingActionButton: FloatingActionButton(
+        child: const Icon(Icons.add),
+        onPressed: () => _showUserDialog(context, ref),
       ),
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, st) => Center(child: Text('Error: $e')),
+      body: usersAsync.when(
+        data: (users) => ListView.builder(
+          itemCount: users.length,
+          itemBuilder: (context, index) {
+            final user = users[index];
+            return ListTile(
+              leading:
+                  Icon(user.isAdmin ? Icons.shield_outlined : Icons.person),
+              title: Text(user.name),
+              subtitle: Text(user.isAdmin ? 'מנהל' : 'משתמש רגיל'),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (!user.isAdmin)
+                    TextButton(
+                      child: const Text('הרשאות'),
+                      onPressed: () =>
+                          _showPermissionsDialog(context, ref, user),
+                    ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline),
+                    onPressed: () async {
+                      await ref.read(databaseProvider).deleteUser(user.id);
+                    },
+                  ),
+                ],
+              ),
+              onTap: () => _showUserDialog(context, ref, user: user),
+            );
+          },
+        ),
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, st) => Center(child: Text('Error: $e')),
+      ),
     );
   }
 
@@ -86,6 +95,76 @@ class _UsersManagementTab extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (context) => _PermissionsDialog(user: user),
+    );
+  }
+
+  void _showUserDialog(BuildContext context, WidgetRef ref, {User? user}) {
+    final nameController = TextEditingController(text: user?.name);
+    bool isAdmin = user?.isAdmin ?? false;
+    final formKey = GlobalKey<FormState>();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text(user == null ? 'הוספת משתמש חדש' : 'עריכת משתמש'),
+              content: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextFormField(
+                      controller: nameController,
+                      decoration: const InputDecoration(labelText: 'שם משתמש'),
+                      validator: (v) => v!.isEmpty ? 'שדה חובה' : null,
+                    ),
+                    CheckboxListTile(
+                      title: const Text('האם מנהל?'),
+                      value: isAdmin,
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() {
+                            isAdmin = value;
+                          });
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('ביטול'),
+                ),
+                FilledButton(
+                  onPressed: () async {
+                    if (formKey.currentState!.validate()) {
+                      final companion = UsersCompanion(
+                        name: drift.Value(nameController.text),
+                        isAdmin: drift.Value(isAdmin),
+                      );
+                      if (user == null) {
+                        await ref
+                            .read(databaseProvider)
+                            .insertUser(companion);
+                      } else {
+                        await ref.read(databaseProvider).updateUser(
+                              companion.copyWith(id: drift.Value(user.id)),
+                            );
+                      }
+                      Navigator.of(context).pop();
+                    }
+                  },
+                  child: const Text('שמירה'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }
