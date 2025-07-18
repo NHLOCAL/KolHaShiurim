@@ -412,7 +412,8 @@ class _DevicesManagementTab extends ConsumerWidget {
     final formKey = GlobalKey<FormState>();
 
     bool isLoading = false;
-    
+    bool isEditingSerial = false;
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -420,7 +421,7 @@ class _DevicesManagementTab extends ConsumerWidget {
         return StatefulBuilder(
           builder: (context, setState) {
             final usersAsync = ref.watch(allUsersProvider);
-            
+
             return AlertDialog(
               title: Text(device == null ? 'הוספת התקן חדש' : 'עריכת התקן'),
               content: Form(
@@ -430,91 +431,117 @@ class _DevicesManagementTab extends ConsumerWidget {
                   children: [
                     ElevatedButton.icon(
                       icon: const Icon(Icons.folder_open),
-                      label: Text(isLoading ? "אנא המתן..." : "בחר תיקיית מקור"),
-                      onPressed: isLoading ? null : () async {
-                        setState(() => isLoading = true);
-                        try {
-                          // 1. Let user pick a directory.
-                          final selectedPath =
-                              await FilePicker.platform.getDirectoryPath(
-                            lockParentWindow: true,
-                            dialogTitle: 'בחר תיקיית מקור מההתקן החיצוני',
-                          );
-                          if (selectedPath == null) {
-                            setState(() => isLoading = false);
-                            return; // User canceled.
-                          }
+                      label:
+                          Text(isLoading ? "אנא המתן..." : "בחר תיקיית מקור"),
+                      onPressed: isLoading
+                          ? null
+                          : () async {
+                              setState(() => isLoading = true);
+                              try {
+                                // 1. Let user pick a directory.
+                                final selectedPath =
+                                    await FilePicker.platform.getDirectoryPath(
+                                  lockParentWindow: true,
+                                  dialogTitle: 'בחר תיקיית מקור מההתקן החיצוני',
+                                );
+                                if (selectedPath == null) {
+                                  setState(() => isLoading = false);
+                                  return; // User canceled.
+                                }
 
-                          // 2. Find the drive that contains this path.
-                          final devices =
-                              await DeviceService().watchConnectedDevices().first;
-                          if (devices.isEmpty) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                    content: Text("לא נמצאו כוננים חיצוניים.")),
-                              );
-                            }
-                            setState(() => isLoading = false);
-                            return;
-                          }
+                                // 2. Find the drive that contains this path.
+                                final devices = await DeviceService()
+                                    .watchConnectedDevices()
+                                    .first;
+                                if (devices.isEmpty) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                          content: Text(
+                                              "לא נמצאו כוננים חיצוניים.")),
+                                    );
+                                  }
+                                  setState(() => isLoading = false);
+                                  return;
+                                }
 
-                          ConnectedDeviceInfo? drive;
-                          try {
-                            drive = devices.firstWhere(
-                                (d) => selectedPath.startsWith(d.mountPath));
-                          } catch (e) {
-                            drive = null;
-                          }
+                                ConnectedDeviceInfo? drive;
+                                try {
+                                  drive = devices.firstWhere((d) =>
+                                      selectedPath.startsWith(d.mountPath));
+                                } catch (e) {
+                                  drive = null;
+                                }
 
-                          if (drive == null) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                    content: Text(
-                                        "התיקיה שנבחרה אינה נמצאת על כונן חיצוני מזוהה.")),
-                              );
-                            }
-                            setState(() => isLoading = false);
-                            return;
-                          }
+                                if (drive == null) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                          content: Text(
+                                              "התיקיה שנבחרה אינה נמצאת על כונן חיצוני מזוהה.")),
+                                    );
+                                  }
+                                  setState(() => isLoading = false);
+                                  return;
+                                }
 
-                          // 3. Calculate relative path.
-                          String relativePath = selectedPath
-                              .substring(drive.mountPath.length)
-                              .trim();
-                          if (relativePath.startsWith(r'\')) {
-                            relativePath = relativePath.substring(1);
-                          }
+                                // 3. Calculate relative path.
+                                String relativePath = selectedPath
+                                    .substring(drive.mountPath.length)
+                                    .trim();
+                                if (relativePath.startsWith(r'\')) {
+                                  relativePath = relativePath.substring(1);
+                                }
 
-                          // 4. Update controllers with setState
-                          if (context.mounted) {
-                            setState(() {
-                              serialController.text = drive!.serialNumber;
-                              sourcePathController.text = relativePath;
-                              isLoading = false;
-                            });
-                          }
-                        } catch (e) {
-                          if (context.mounted) {
-                            setState(() => isLoading = false);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('שגיאה: $e'),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                          }
-                        }
-                      },
+                                // 4. Update controllers with setState
+                                if (context.mounted) {
+                                  setState(() {
+                                    serialController.text = drive!.serialNumber;
+                                    sourcePathController.text = relativePath;
+                                    isLoading = false;
+                                  });
+                                }
+                              } catch (e) {
+                                if (context.mounted) {
+                                  setState(() => isLoading = false);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('שגיאה: $e'),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                }
+                              }
+                            },
                     ),
-                    TextFormField(
-                      controller: serialController,
-                      readOnly: true, // Serial should be read-only
-                      decoration: const InputDecoration(
-                        labelText: 'מספר סידורי (מזוהה אוטומטית)',
-                      ),
-                      validator: (v) => v!.isEmpty ? 'שדה חובה' : null,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: serialController,
+                            readOnly:
+                                !isEditingSerial, // Only editable when edit mode is on
+                            decoration: InputDecoration(
+                              labelText: 'מספר סידורי',
+                              helperText: isEditingSerial
+                                  ? 'מצב עריכה פעיל'
+                                  : 'לחץ על כפתור העריכה כדי לשנות',
+                            ),
+                            validator: (v) => v!.isEmpty ? 'שדה חובה' : null,
+                          ),
+                        ),
+                        IconButton(
+                          icon: Icon(isEditingSerial ? Icons.done : Icons.edit),
+                          onPressed: () {
+                            setState(() {
+                              isEditingSerial = !isEditingSerial;
+                            });
+                          },
+                          tooltip: isEditingSerial
+                              ? 'סיים עריכה'
+                              : 'ערוך מספר סידורי',
+                        ),
+                      ],
                     ),
                     TextFormField(
                       controller: sourcePathController,
@@ -547,32 +574,9 @@ class _DevicesManagementTab extends ConsumerWidget {
                     onPressed: () => Navigator.of(context).pop(),
                     child: const Text('ביטול')),
                 FilledButton(
-                  onPressed: isLoading ? null : () async {
+                  onPressed: () async {
                     if (formKey.currentState!.validate()) {
                       final serialNumber = serialController.text;
-                      final currentId = device?.id;
-
-                      // Check if the serial number is already used by ANOTHER device.
-                      final allDevices =
-                          await ref.read(allDevicesProvider.future);
-                      final conflictingDevice = allDevices.where((d) {
-                        return d.device.serialNumber == serialNumber &&
-                            d.device.id != currentId;
-                      });
-
-                      if (conflictingDevice.isNotEmpty) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                  'שגיאה: המספר הסידורי כבר משויך להתקן אחר.'),
-                              backgroundColor: Colors.red,
-                            ),
-                          );
-                        }
-                        return; // Stop execution
-                      }
-
                       final companion = DevicesCompanion(
                         serialNumber: drift.Value(serialNumber),
                         sourcePath: drift.Value(sourcePathController.text),
