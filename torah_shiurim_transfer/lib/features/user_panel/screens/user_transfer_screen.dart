@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
+import 'package:kosher_dart/kosher_dart.dart';
 import 'package:path/path.dart' as p;
 import 'package:torah_shiurim_transfer/core/database/database.dart';
 import 'package:torah_shiurim_transfer/core/providers/providers.dart';
@@ -12,11 +12,8 @@ final _sourceFilesProvider =
   final authState = ref.watch(authStateProvider);
   final fileService = ref.watch(fileServiceProvider);
 
-  // CHANGED: Now correctly uses the runtime mountPath and the configured sourcePath.
   return authState.maybeMap(
     user: (userState) async {
-      // The full path is the combination of the detected mount path (e.g., E:\)
-      // and the relative source path from the DB (e.g., records\).
       final sourcePath =
           p.join(userState.mountPath, userState.device.sourcePath);
       return fileService.getAudioFiles(sourcePath);
@@ -38,6 +35,7 @@ final _allowedRabbisProvider = StreamProvider.autoDispose<List<Rabbi>>((ref) {
 
 class UserTransferScreen extends ConsumerStatefulWidget {
   const UserTransferScreen({super.key});
+
   @override
   ConsumerState<UserTransferScreen> createState() => _UserTransferScreenState();
 }
@@ -45,7 +43,7 @@ class UserTransferScreen extends ConsumerStatefulWidget {
 class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
   File? _selectedFile;
   Rabbi? _selectedRabbi;
-  DateTime _selectedDate = DateTime.now();
+  JewishDate _selectedDate = JewishDate();
   final _topicController = TextEditingController();
   bool _isCopying = false;
   String? _lastCopiedFileName;
@@ -58,12 +56,14 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
 
   String _getNewFileName() {
     if (_selectedRabbi == null || _selectedFile == null) return "שם קובץ...";
-    final date = DateFormat('yyyy-MM-dd').format(_selectedDate);
+    final formatter = HebrewDateFormatter()
+      ..hebrewFormat = true
+      ..useGershGershayim = true;
+    final dateStr = formatter.format(_selectedDate);
     final topic = _topicController.text.trim();
-    // Sanitize topic to be a valid file name part
     final sanitizedTopic = topic.replaceAll(RegExp(r'[\\/*?:"<>|]'), '');
     final extension = p.extension(_selectedFile!.path);
-    return "$date - ${_selectedRabbi!.name} - ${sanitizedTopic.isNotEmpty ? sanitizedTopic : 'ללא נושא'}$extension";
+    return "$dateStr - ${_selectedRabbi!.name} - ${sanitizedTopic.isNotEmpty ? sanitizedTopic : 'ללא נושא'}$extension";
   }
 
   Future<void> _copyFile() async {
@@ -88,7 +88,6 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
             newFileName: newFileName,
           );
 
-      // Log the transfer to the database
       await authState.maybeWhen(
         user: (user, device, mountPath) async {
           await ref.read(databaseProvider).logTransfer(
@@ -110,7 +109,6 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
         ),
       );
 
-      // Reset the form and show the last copied file name
       setState(() {
         _lastCopiedFileName = newFileName;
         _selectedFile = null;
@@ -120,8 +118,9 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
     } catch (e) {
       scaffoldMessenger.showSnackBar(
         SnackBar(
-            content: Text('שגיאה בהעתקת הקובץ: $e'),
-            backgroundColor: Colors.red),
+          content: Text('שגיאה בהעתקת הקובץ: $e'),
+          backgroundColor: Colors.red,
+        ),
       );
     } finally {
       setState(() => _isCopying = false);
@@ -144,8 +143,10 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
         title: Text('העברת שיעורים - שלום, $userName'),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(20.0),
-          child: Text('התקן מחובר: $deviceSerial',
-              style: Theme.of(context).textTheme.bodySmall),
+          child: Text(
+            'התקן מחובר: $deviceSerial',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
         ),
         actions: [
           IconButton(
@@ -166,8 +167,10 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
                 children: [
                   Padding(
                     padding: const EdgeInsets.all(8.0),
-                    child: Text("קבצים מההתקן",
-                        style: Theme.of(context).textTheme.titleMedium),
+                    child: Text(
+                      "קבצים מההתקן",
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
                   ),
                   const Divider(height: 1),
                   Expanded(
@@ -192,8 +195,7 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
                                       : null,
                                   onTap: () => setState(() {
                                     _selectedFile = file;
-                                    _lastCopiedFileName =
-                                        null; // Clear last copied when selecting new file
+                                    _lastCopiedFileName = null;
                                   }),
                                 );
                               },
@@ -208,6 +210,7 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
               ),
             ),
           ),
+
           // Right side: Transfer details form
           Expanded(
             flex: 3,
@@ -222,16 +225,20 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Text('פרטי העברה',
-                            style: Theme.of(context).textTheme.headlineSmall),
+                        Text(
+                          'פרטי העברה',
+                          style: Theme.of(context).textTheme.headlineSmall,
+                        ),
                         const Divider(),
                         if (_selectedFile == null &&
                             _lastCopiedFileName != null)
                           Card(
                             color: Colors.green.shade50,
                             child: ListTile(
-                              leading: const Icon(Icons.check_circle,
-                                  color: Colors.green),
+                              leading: const Icon(
+                                Icons.check_circle,
+                                color: Colors.green,
+                              ),
                               title: const Text("העתקה הושלמה"),
                               subtitle: Text(_lastCopiedFileName!),
                             ),
@@ -239,8 +246,12 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
                         if (_selectedFile == null &&
                             _lastCopiedFileName == null)
                           const Expanded(
-                              child: Center(
-                                  child: Text("בחר קובץ מהרשימה כדי להתחיל."))),
+                            child: Center(
+                              child: Text(
+                                "בחר קובץ מהרשימה כדי להתחיל.",
+                              ),
+                            ),
+                          ),
                         if (_selectedFile != null)
                           Expanded(
                             child: ListView(
@@ -257,15 +268,19 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
                                       DropdownButtonFormField<Rabbi>(
                                     value: _selectedRabbi,
                                     items: rabbis
-                                        .map((rabbi) => DropdownMenuItem(
+                                        .map(
+                                          (rabbi) => DropdownMenuItem(
                                             value: rabbi,
-                                            child: Text(rabbi.name)))
+                                            child: Text(rabbi.name),
+                                          ),
+                                        )
                                         .toList(),
                                     onChanged: (val) =>
                                         setState(() => _selectedRabbi = val),
                                     decoration: const InputDecoration(
-                                        labelText: 'בחר רב',
-                                        border: OutlineInputBorder()),
+                                      labelText: 'בחר רב',
+                                      border: OutlineInputBorder(),
+                                    ),
                                   ),
                                   loading: () => const Center(
                                       child: CircularProgressIndicator()),
@@ -275,39 +290,48 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
                                 TextField(
                                   controller: _topicController,
                                   decoration: const InputDecoration(
-                                      labelText: 'נושא השיעור (אופציונלי)',
-                                      border: OutlineInputBorder()),
+                                    labelText: 'נושא השיעור (אופציונלי)',
+                                    border: OutlineInputBorder(),
+                                  ),
                                   onChanged: (_) => setState(() {}),
                                 ),
                                 const SizedBox(height: 16),
                                 ListTile(
                                   title: Text(
-                                      "תאריך השיעור: ${DateFormat('dd/MM/yyyy').format(_selectedDate)}"),
+                                    "תאריך השיעור: ${HebrewDateFormatter().format(_selectedDate)}",
+                                  ),
                                   trailing: const Icon(Icons.calendar_today),
                                   onTap: () async {
                                     final picked = await showDatePicker(
                                       context: context,
-                                      initialDate: _selectedDate,
+                                      initialDate:
+                                          _selectedDate.getGregorianCalendar(),
                                       firstDate: DateTime(2000),
                                       lastDate: DateTime.now()
                                           .add(const Duration(days: 365)),
                                     );
                                     if (picked != null) {
-                                      setState(() => _selectedDate = picked);
+                                      setState(
+                                        () => _selectedDate =
+                                            JewishDate.fromDateTime(picked),
+                                      );
                                     }
                                   },
                                 ),
                                 const SizedBox(height: 24),
-                                Text('שם קובץ היעד:',
-                                    style:
-                                        Theme.of(context).textTheme.titleSmall),
+                                Text(
+                                  'שם קובץ היעד:',
+                                  style: Theme.of(context).textTheme.titleSmall,
+                                ),
                                 const SizedBox(height: 4),
                                 Text(
                                   _getNewFileName(),
                                   style: Theme.of(context)
                                       .textTheme
                                       .bodyMedium
-                                      ?.copyWith(color: Colors.grey.shade700),
+                                      ?.copyWith(
+                                        color: Colors.grey.shade700,
+                                      ),
                                   overflow: TextOverflow.ellipsis,
                                   maxLines: 2,
                                 ),
@@ -322,11 +346,17 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
                                     width: 20,
                                     height: 20,
                                     child: CircularProgressIndicator(
-                                        strokeWidth: 2))
-                                : const Icon(Icons.copy_all_outlined),
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(
+                                    Icons.copy_all_outlined,
+                                  ),
                             label: const Text('העתק את השיעור'),
                             style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 16,
+                              ),
                               backgroundColor:
                                   Theme.of(context).colorScheme.primary,
                               foregroundColor:
@@ -335,14 +365,14 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
                             onPressed:
                                 _selectedRabbi == null ? null : _copyFile,
                           ),
-                        ]
+                        ],
                       ],
                     ),
                   ),
                 ),
               ),
             ),
-          )
+          ),
         ],
       ),
     );
