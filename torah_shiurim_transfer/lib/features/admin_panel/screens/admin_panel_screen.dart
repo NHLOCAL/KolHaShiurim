@@ -411,6 +411,8 @@ class _DevicesManagementTab extends ConsumerWidget {
     int? selectedUserId = device?.userId;
     final formKey = GlobalKey<FormState>();
 
+    bool isLoading = false;
+    
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -418,7 +420,7 @@ class _DevicesManagementTab extends ConsumerWidget {
         return StatefulBuilder(
           builder: (context, setState) {
             final usersAsync = ref.watch(allUsersProvider);
-
+            
             return AlertDialog(
               title: Text(device == null ? 'הוספת התקן חדש' : 'עריכת התקן'),
               content: Form(
@@ -428,62 +430,82 @@ class _DevicesManagementTab extends ConsumerWidget {
                   children: [
                     ElevatedButton.icon(
                       icon: const Icon(Icons.folder_open),
-                      label: const Text("בחר תיקיית מקור"),
-                      onPressed: () async {
-                        // 1. Let user pick a directory.
-                        final selectedPath =
-                            await FilePicker.platform.getDirectoryPath(
-                          lockParentWindow: true,
-                          dialogTitle: 'בחר תיקיית מקור מההתקן החיצוני',
-                        );
-                        if (selectedPath == null) return; // User canceled.
-
-                        // 2. Find the drive that contains this path.
-                        final devices = await DeviceService()
-                            .watchConnectedDevices()
-                            .first;
-                        if (devices.isEmpty) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                  content: Text("לא נמצאו כוננים חיצוניים.")),
-                            );
-                          }
-                          return;
-                        }
-
-                        ConnectedDeviceInfo? drive;
+                      label: Text(isLoading ? "אנא המתן..." : "בחר תיקיית מקור"),
+                      onPressed: isLoading ? null : () async {
+                        setState(() => isLoading = true);
                         try {
-                          drive = devices.firstWhere((d) =>
-                              selectedPath.startsWith(d.mountPath));
-                        } catch (e) {
-                          drive = null;
-                        }
+                          // 1. Let user pick a directory.
+                          final selectedPath =
+                              await FilePicker.platform.getDirectoryPath(
+                            lockParentWindow: true,
+                            dialogTitle: 'בחר תיקיית מקור מההתקן החיצוני',
+                          );
+                          if (selectedPath == null) {
+                            setState(() => isLoading = false);
+                            return; // User canceled.
+                          }
 
-                        if (drive == null) {
+                          // 2. Find the drive that contains this path.
+                          final devices =
+                              await DeviceService().watchConnectedDevices().first;
+                          if (devices.isEmpty) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                    content: Text("לא נמצאו כוננים חיצוניים.")),
+                              );
+                            }
+                            setState(() => isLoading = false);
+                            return;
+                          }
+
+                          ConnectedDeviceInfo? drive;
+                          try {
+                            drive = devices.firstWhere(
+                                (d) => selectedPath.startsWith(d.mountPath));
+                          } catch (e) {
+                            drive = null;
+                          }
+
+                          if (drive == null) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                    content: Text(
+                                        "התיקיה שנבחרה אינה נמצאת על כונן חיצוני מזוהה.")),
+                              );
+                            }
+                            setState(() => isLoading = false);
+                            return;
+                          }
+
+                          // 3. Calculate relative path.
+                          String relativePath = selectedPath
+                              .substring(drive.mountPath.length)
+                              .trim();
+                          if (relativePath.startsWith(r'\')) {
+                            relativePath = relativePath.substring(1);
+                          }
+
+                          // 4. Update controllers with setState
                           if (context.mounted) {
+                            setState(() {
+                              serialController.text = drive!.serialNumber;
+                              sourcePathController.text = relativePath;
+                              isLoading = false;
+                            });
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            setState(() => isLoading = false);
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                  content: Text(
-                                      "התיקיה שנבחרה אינה נמצאת על כונן חיצוני מזוהה.")),
+                              SnackBar(
+                                content: Text('שגיאה: $e'),
+                                backgroundColor: Colors.red,
+                              ),
                             );
                           }
-                          return;
                         }
-
-                        // 3. Calculate relative path.
-                        String relativePath = selectedPath
-                            .substring(drive.mountPath.length)
-                            .trim();
-                        if (relativePath.startsWith(r'\')) {
-                          relativePath = relativePath.substring(1);
-                        }
-
-                        // 4. Update controllers.
-                        setState(() {
-                          serialController.text = drive!.serialNumber;
-                          sourcePathController.text = relativePath;
-                        });
                       },
                     ),
                     TextFormField(
@@ -525,7 +547,7 @@ class _DevicesManagementTab extends ConsumerWidget {
                     onPressed: () => Navigator.of(context).pop(),
                     child: const Text('ביטול')),
                 FilledButton(
-                  onPressed: () async {
+                  onPressed: isLoading ? null : () async {
                     if (formKey.currentState!.validate()) {
                       final serialNumber = serialController.text;
                       final currentId = device?.id;
