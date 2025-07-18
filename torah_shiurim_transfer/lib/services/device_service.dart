@@ -21,18 +21,25 @@ class DeviceService {
     final List<ConnectedDeviceInfo> devices = [];
     if (Platform.isWindows) {
       try {
-        final result = await Process.run('wmic', ['logicaldisk', 'where', 'drivetype=2', 'get', 'name,volumeserialnumber']);
+        // MODIFIED: Query all logical disks, not just removable ones.
+        final result = await Process.run('wmic', ['logicaldisk', 'get', 'name,volumeserialnumber']);
         final output = result.stdout.toString();
-        final lines = output.split('\n').skip(1);
+        // MODIFIED: Improved parsing to be more robust.
+        final lines = output.split('\n').where((line) => line.trim().isNotEmpty).skip(1);
 
         for (final line in lines) {
-          final parts = line.trim().split(RegExp(r'\s+'));
-          if (parts.length >= 2) {
-            final driveLetter = parts[0];
-            final serial = parts.sublist(1).join();
+          // Trim the line and then look for the position of the first space.
+          final trimmedLine = line.trim();
+          final spaceIndex = trimmedLine.indexOf(' ');
+
+          if (spaceIndex != -1 && spaceIndex + 1 < trimmedLine.length) {
+            // The drive letter is before the first space.
+            final driveLetter = trimmedLine.substring(0, spaceIndex).trim();
+            // The serial number is everything after the first space.
+            final serial = trimmedLine.substring(spaceIndex + 1).trim();
+
             if (driveLetter.isNotEmpty && serial.isNotEmpty) {
-               // The constructor for ConnectedDeviceInfo is now correctly found.
-               devices.add(ConnectedDeviceInfo(mountPath: '$driveLetter\\', serialNumber: serial));
+               devices.add(ConnectedDeviceInfo(mountPath: '$driveLetter', serialNumber: serial));
             }
           }
         }
@@ -44,7 +51,6 @@ class DeviceService {
       if (await dir.exists()) {
         await for (final entity in dir.list()) {
           if (entity is Directory) {
-            // The constructor for ConnectedDeviceInfo is now correctly found.
             devices.add(ConnectedDeviceInfo(mountPath: entity.path, serialNumber: entity.path));
           }
         }
