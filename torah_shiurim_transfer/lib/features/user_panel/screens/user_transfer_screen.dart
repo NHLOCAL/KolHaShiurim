@@ -12,7 +12,6 @@ final _sourceFilesProvider =
   final authState = ref.watch(authStateProvider);
   final fileService = ref.watch(fileServiceProvider);
 
-  // Refresh when a file is copied
   ref.watch(_lastCopiedFileNameProvider);
 
   return authState.maybeMap(
@@ -35,7 +34,6 @@ final _allowedRabbisProvider = StreamProvider.autoDispose<List<Rabbi>>((ref) {
   );
 });
 
-// Provider to hold the last copied file name and trigger refresh
 final _lastCopiedFileNameProvider = StateProvider<String?>((ref) => null);
 
 class UserTransferScreen extends ConsumerStatefulWidget {
@@ -52,8 +50,6 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
   final _topicController = TextEditingController();
   bool _isCopying = false;
 
-  // The lists are reversed to display correctly in an RTL Row layout.
-  // The parentheses are also reversed for correct RTL display.
   final List<List<String>> _hebrewKeys = const [
     ['-', '0', '9', '8', '7', '6', '5', '4', '3', '2', '1'],
     ['(', ')', 'פ', 'ם', 'ן', 'ו', 'ט', 'א', 'ר', 'ק', '\''],
@@ -206,14 +202,13 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
           padding: const EdgeInsets.symmetric(vertical: 3.0),
           child: Row(
             children: [
-              // --- תיקון סדר, גודל ומיקום ---
               Expanded(
-                flex: 2, // Backspace is larger
+                flex: 2,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 3.0),
                   child: ElevatedButton(
                     style: buttonStyle.copyWith(
-                      padding: MaterialStateProperty.all(
+                      padding: WidgetStateProperty.all(
                           const EdgeInsets.symmetric(vertical: 16)),
                     ),
                     onPressed: () {
@@ -230,7 +225,7 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
                 ),
               ),
               Expanded(
-                flex: 8, // Spacebar is smaller
+                flex: 8,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 3.0),
                   child: ElevatedButton.icon(
@@ -243,7 +238,6 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
                   ),
                 ),
               ),
-              // --- סוף התיקון ---
             ],
           ),
         ),
@@ -277,13 +271,6 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
             style: theme.textTheme.bodySmall,
           ),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'התנתק וחזור למסך המתנה',
-            onPressed: () => ref.read(authStateProvider.notifier).logout(),
-          ),
-        ],
       ),
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
