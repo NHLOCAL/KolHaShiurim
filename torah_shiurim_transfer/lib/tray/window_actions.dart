@@ -1,9 +1,12 @@
 import 'dart:io' show Platform;
+import 'dart:ffi' as dart_ffi;
+import 'package:ffi/ffi.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter/services.dart';
+import 'package:win32/win32.dart' as win32;
 
 class WindowActions {
   static late GoRouter router;
@@ -26,16 +29,46 @@ class WindowActions {
     windowManager.addListener(_WindowListener());
   }
 
+  static void _forceShowOnTop() {
+    if (!Platform.isWindows) return;
+
+    // 1. Allocate UTF‑16 title
+    final ptrTitle = 'העברת שיעורי תורה'.toNativeUtf16();
+
+    // 2. Call FindWindow(nullptr, title)
+    final hwnd = win32.FindWindow(
+      dart_ffi.nullptr.cast<Utf16>(),
+      ptrTitle,
+    );
+    calloc.free(ptrTitle);
+
+    if (hwnd == 0) return;
+
+    win32.SetWindowPos(
+      hwnd,
+      win32.HWND_TOPMOST,
+      0,
+      0,
+      0,
+      0,
+      win32.SWP_NOMOVE | win32.SWP_NOSIZE | win32.SWP_SHOWWINDOW,
+    );
+    win32.SetForegroundWindow(hwnd);
+  }
+
   static Future<void> _switchToAdminMode() async {
     if (await windowManager.isFullScreen()) {
       await windowManager.setFullScreen(false);
     }
+    await windowManager.setAlwaysOnTop(false);
     await windowManager.setResizable(true);
 
     if (!Platform.isWindows) {
       try {
         await windowManager.setMovable(true);
-      } on MissingPluginException {}
+      } on MissingPluginException {
+        // not supported everywhere
+      }
     }
 
     await windowManager.setTitleBarStyle(TitleBarStyle.normal);
@@ -44,13 +77,16 @@ class WindowActions {
   }
 
   static Future<void> _switchToKioskMode() async {
+    await windowManager.setAlwaysOnTop(true);
     await windowManager.setFullScreen(true);
     await windowManager.setResizable(false);
 
     if (!Platform.isWindows) {
       try {
         await windowManager.setMovable(false);
-      } on MissingPluginException {}
+      } on MissingPluginException {
+        // ignore
+      }
     }
 
     await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
@@ -68,11 +104,14 @@ class WindowActions {
     router.go('/user');
     await windowManager.show();
     await windowManager.focus();
+    _forceShowOnTop();
   }
 
   static Future<void> hide({bool resizeToAdmin = true}) async {
     if (resizeToAdmin) {
       await _switchToAdminMode();
+    } else {
+      await windowManager.setAlwaysOnTop(false);
     }
     await windowManager.hide();
   }
@@ -90,5 +129,7 @@ class _WindowListener extends WindowListener {
   }
 
   @override
-  void onWindowFocus() {}
+  void onWindowFocus() {
+    // optional debug hook
+  }
 }
