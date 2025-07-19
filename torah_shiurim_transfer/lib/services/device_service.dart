@@ -1,13 +1,29 @@
 import 'dart:async';
 import 'dart:io';
-// FIXED: Corrected the import path. This was the source of many errors.
+import 'package:device_manager/device_manager.dart'; // הוספת חבילת device_manager
 import 'package:torah_shiurim_transfer/models/device_info.dart';
 
 class DeviceService {
+  final StreamController<List<ConnectedDeviceInfo>> _controller =
+      StreamController.broadcast();
+
+  DeviceService() {
+    if (Platform.isWindows) {
+      // מאזינים לאירועי חיבור/ניתוק התקנים
+      DeviceManager().addListener(_handleDeviceChange);
+    }
+  }
+
+  /// זרם ששולח רשימת התקנים רק כשיש שינוי.
   Stream<List<ConnectedDeviceInfo>> watchConnectedDevices() {
-    return Stream.periodic(const Duration(seconds: 2))
-        .asyncMap((_) => _getConnectedVolumes())
+    return _controller.stream
         .distinct((prev, next) => _areDeviceListsEqual(prev, next));
+  }
+
+  /// מטפל באירוע חיבור או ניתוק התקן
+  void _handleDeviceChange() async {
+    final devices = await _getConnectedVolumes();
+    _controller.add(devices);
   }
 
   bool _areDeviceListsEqual(
@@ -23,28 +39,22 @@ class DeviceService {
     final List<ConnectedDeviceInfo> devices = [];
     if (Platform.isWindows) {
       try {
-        // MODIFIED: Query all logical disks, not just removable ones.
+        // שואלים את כל הדיסקים הלוגיים
         final result = await Process.run(
             'wmic', ['logicaldisk', 'get', 'name,volumeserialnumber']);
         final output = result.stdout.toString();
-        // MODIFIED: Improved parsing to be more robust.
         final lines =
             output.split('\n').where((line) => line.trim().isNotEmpty).skip(1);
 
         for (final line in lines) {
-          // Trim the line and then look for the position of the first space.
-          final trimmedLine = line.trim();
-          final spaceIndex = trimmedLine.indexOf(' ');
-
-          if (spaceIndex != -1 && spaceIndex + 1 < trimmedLine.length) {
-            // The drive letter is before the first space.
-            final driveLetter = trimmedLine.substring(0, spaceIndex).trim();
-            // The serial number is everything after the first space.
-            final serial = trimmedLine.substring(spaceIndex + 1).trim();
-
-            if (driveLetter.isNotEmpty && serial.isNotEmpty) {
-              devices.add(ConnectedDeviceInfo(
-                  mountPath: driveLetter, serialNumber: serial));
+          final trimmed = line.trim();
+          final parts = trimmed.split(RegExp(r'\s+'));
+          if (parts.length >= 2) {
+            final drive = parts[0];
+            final serial = parts.sublist(1).join();
+            if (drive.isNotEmpty && serial.isNotEmpty) {
+              devices.add(
+                  ConnectedDeviceInfo(mountPath: drive, serialNumber: serial));
             }
           }
         }
@@ -52,7 +62,7 @@ class DeviceService {
         print("Error getting drives on Windows: $e");
       }
     } else {
-      // macOS / Linux
+      // macOS / Linux – אם נדרש
       final dir = Directory('/Volumes');
       if (await dir.exists()) {
         await for (final entity in dir.list()) {
@@ -64,5 +74,12 @@ class DeviceService {
       }
     }
     return devices;
+  }
+
+  /// לבירור: יש לסגור את ה-StreamController בעת סגירת האפליקציה
+  void dispose() {
+    if (!_controller.isClosed) {
+      _controller.close();
+    }
   }
 }
