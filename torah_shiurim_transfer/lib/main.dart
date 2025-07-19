@@ -1,5 +1,3 @@
-// lib/main.dart
-
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,17 +7,15 @@ import 'package:torah_shiurim_transfer/tray/tray_initializer.dart';
 import 'package:torah_shiurim_transfer/tray/window_actions.dart';
 
 void main() async {
-  // חשוב: המנעו מ–runApp לפני האתחול של window_manager
   await WindowActions.init();
 
-  // אתחל את מגש המערכת
   await TrayInitializer().init();
 
-  // צור את מיכל ה־Riverpod
   final container = ProviderContainer();
   WindowActions.router = container.read(routerProvider);
 
-  // התחבר כמנהל כדי שהחלון יוצג אוטומטית
+  await container.read(databaseProvider).getAppSettings();
+
   await container.read(authStateProvider.notifier).loginAsAdmin();
 
   runApp(

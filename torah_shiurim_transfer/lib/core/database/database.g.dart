@@ -1216,6 +1216,229 @@ class TransfersCompanion extends UpdateCompanion<Transfer> {
   }
 }
 
+class $AppSettingsTable extends AppSettings
+    with TableInfo<$AppSettingsTable, AppSetting> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $AppSettingsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+      'id', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(1));
+  static const VerificationMeta _convertToMp3Meta =
+      const VerificationMeta('convertToMp3');
+  @override
+  late final GeneratedColumn<bool> convertToMp3 = GeneratedColumn<bool>(
+      'convert_to_mp3', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("convert_to_mp3" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _mp3BitrateMeta =
+      const VerificationMeta('mp3Bitrate');
+  @override
+  late final GeneratedColumn<int> mp3Bitrate = GeneratedColumn<int>(
+      'mp3_bitrate', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(128));
+  @override
+  List<GeneratedColumn> get $columns => [id, convertToMp3, mp3Bitrate];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'app_settings';
+  @override
+  VerificationContext validateIntegrity(Insertable<AppSetting> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('convert_to_mp3')) {
+      context.handle(
+          _convertToMp3Meta,
+          convertToMp3.isAcceptableOrUnknown(
+              data['convert_to_mp3']!, _convertToMp3Meta));
+    }
+    if (data.containsKey('mp3_bitrate')) {
+      context.handle(
+          _mp3BitrateMeta,
+          mp3Bitrate.isAcceptableOrUnknown(
+              data['mp3_bitrate']!, _mp3BitrateMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  AppSetting map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return AppSetting(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
+      convertToMp3: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}convert_to_mp3'])!,
+      mp3Bitrate: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}mp3_bitrate'])!,
+    );
+  }
+
+  @override
+  $AppSettingsTable createAlias(String alias) {
+    return $AppSettingsTable(attachedDatabase, alias);
+  }
+}
+
+class AppSetting extends DataClass implements Insertable<AppSetting> {
+  final int id;
+  final bool convertToMp3;
+  final int mp3Bitrate;
+  const AppSetting(
+      {required this.id, required this.convertToMp3, required this.mp3Bitrate});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['convert_to_mp3'] = Variable<bool>(convertToMp3);
+    map['mp3_bitrate'] = Variable<int>(mp3Bitrate);
+    return map;
+  }
+
+  AppSettingsCompanion toCompanion(bool nullToAbsent) {
+    return AppSettingsCompanion(
+      id: Value(id),
+      convertToMp3: Value(convertToMp3),
+      mp3Bitrate: Value(mp3Bitrate),
+    );
+  }
+
+  factory AppSetting.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return AppSetting(
+      id: serializer.fromJson<int>(json['id']),
+      convertToMp3: serializer.fromJson<bool>(json['convertToMp3']),
+      mp3Bitrate: serializer.fromJson<int>(json['mp3Bitrate']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'convertToMp3': serializer.toJson<bool>(convertToMp3),
+      'mp3Bitrate': serializer.toJson<int>(mp3Bitrate),
+    };
+  }
+
+  AppSetting copyWith({int? id, bool? convertToMp3, int? mp3Bitrate}) =>
+      AppSetting(
+        id: id ?? this.id,
+        convertToMp3: convertToMp3 ?? this.convertToMp3,
+        mp3Bitrate: mp3Bitrate ?? this.mp3Bitrate,
+      );
+  AppSetting copyWithCompanion(AppSettingsCompanion data) {
+    return AppSetting(
+      id: data.id.present ? data.id.value : this.id,
+      convertToMp3: data.convertToMp3.present
+          ? data.convertToMp3.value
+          : this.convertToMp3,
+      mp3Bitrate:
+          data.mp3Bitrate.present ? data.mp3Bitrate.value : this.mp3Bitrate,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AppSetting(')
+          ..write('id: $id, ')
+          ..write('convertToMp3: $convertToMp3, ')
+          ..write('mp3Bitrate: $mp3Bitrate')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, convertToMp3, mp3Bitrate);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is AppSetting &&
+          other.id == this.id &&
+          other.convertToMp3 == this.convertToMp3 &&
+          other.mp3Bitrate == this.mp3Bitrate);
+}
+
+class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
+  final Value<int> id;
+  final Value<bool> convertToMp3;
+  final Value<int> mp3Bitrate;
+  const AppSettingsCompanion({
+    this.id = const Value.absent(),
+    this.convertToMp3 = const Value.absent(),
+    this.mp3Bitrate = const Value.absent(),
+  });
+  AppSettingsCompanion.insert({
+    this.id = const Value.absent(),
+    this.convertToMp3 = const Value.absent(),
+    this.mp3Bitrate = const Value.absent(),
+  });
+  static Insertable<AppSetting> custom({
+    Expression<int>? id,
+    Expression<bool>? convertToMp3,
+    Expression<int>? mp3Bitrate,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (convertToMp3 != null) 'convert_to_mp3': convertToMp3,
+      if (mp3Bitrate != null) 'mp3_bitrate': mp3Bitrate,
+    });
+  }
+
+  AppSettingsCompanion copyWith(
+      {Value<int>? id, Value<bool>? convertToMp3, Value<int>? mp3Bitrate}) {
+    return AppSettingsCompanion(
+      id: id ?? this.id,
+      convertToMp3: convertToMp3 ?? this.convertToMp3,
+      mp3Bitrate: mp3Bitrate ?? this.mp3Bitrate,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (convertToMp3.present) {
+      map['convert_to_mp3'] = Variable<bool>(convertToMp3.value);
+    }
+    if (mp3Bitrate.present) {
+      map['mp3_bitrate'] = Variable<int>(mp3Bitrate.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AppSettingsCompanion(')
+          ..write('id: $id, ')
+          ..write('convertToMp3: $convertToMp3, ')
+          ..write('mp3Bitrate: $mp3Bitrate')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -1225,12 +1448,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $UserRabbiPermissionsTable userRabbiPermissions =
       $UserRabbiPermissionsTable(this);
   late final $TransfersTable transfers = $TransfersTable(this);
+  late final $AppSettingsTable appSettings = $AppSettingsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
   List<DatabaseSchemaEntity> get allSchemaEntities =>
-      [users, devices, rabbis, userRabbiPermissions, transfers];
+      [users, devices, rabbis, userRabbiPermissions, transfers, appSettings];
 }
 
 typedef $$UsersTableCreateCompanionBuilder = UsersCompanion Function({
@@ -2651,6 +2875,138 @@ typedef $$TransfersTableProcessedTableManager = ProcessedTableManager<
     (Transfer, $$TransfersTableReferences),
     Transfer,
     PrefetchHooks Function({bool userId})>;
+typedef $$AppSettingsTableCreateCompanionBuilder = AppSettingsCompanion
+    Function({
+  Value<int> id,
+  Value<bool> convertToMp3,
+  Value<int> mp3Bitrate,
+});
+typedef $$AppSettingsTableUpdateCompanionBuilder = AppSettingsCompanion
+    Function({
+  Value<int> id,
+  Value<bool> convertToMp3,
+  Value<int> mp3Bitrate,
+});
+
+class $$AppSettingsTableFilterComposer
+    extends Composer<_$AppDatabase, $AppSettingsTable> {
+  $$AppSettingsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get convertToMp3 => $composableBuilder(
+      column: $table.convertToMp3, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get mp3Bitrate => $composableBuilder(
+      column: $table.mp3Bitrate, builder: (column) => ColumnFilters(column));
+}
+
+class $$AppSettingsTableOrderingComposer
+    extends Composer<_$AppDatabase, $AppSettingsTable> {
+  $$AppSettingsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get convertToMp3 => $composableBuilder(
+      column: $table.convertToMp3,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get mp3Bitrate => $composableBuilder(
+      column: $table.mp3Bitrate, builder: (column) => ColumnOrderings(column));
+}
+
+class $$AppSettingsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $AppSettingsTable> {
+  $$AppSettingsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<bool> get convertToMp3 => $composableBuilder(
+      column: $table.convertToMp3, builder: (column) => column);
+
+  GeneratedColumn<int> get mp3Bitrate => $composableBuilder(
+      column: $table.mp3Bitrate, builder: (column) => column);
+}
+
+class $$AppSettingsTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $AppSettingsTable,
+    AppSetting,
+    $$AppSettingsTableFilterComposer,
+    $$AppSettingsTableOrderingComposer,
+    $$AppSettingsTableAnnotationComposer,
+    $$AppSettingsTableCreateCompanionBuilder,
+    $$AppSettingsTableUpdateCompanionBuilder,
+    (AppSetting, BaseReferences<_$AppDatabase, $AppSettingsTable, AppSetting>),
+    AppSetting,
+    PrefetchHooks Function()> {
+  $$AppSettingsTableTableManager(_$AppDatabase db, $AppSettingsTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$AppSettingsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$AppSettingsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$AppSettingsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            Value<bool> convertToMp3 = const Value.absent(),
+            Value<int> mp3Bitrate = const Value.absent(),
+          }) =>
+              AppSettingsCompanion(
+            id: id,
+            convertToMp3: convertToMp3,
+            mp3Bitrate: mp3Bitrate,
+          ),
+          createCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            Value<bool> convertToMp3 = const Value.absent(),
+            Value<int> mp3Bitrate = const Value.absent(),
+          }) =>
+              AppSettingsCompanion.insert(
+            id: id,
+            convertToMp3: convertToMp3,
+            mp3Bitrate: mp3Bitrate,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$AppSettingsTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $AppSettingsTable,
+    AppSetting,
+    $$AppSettingsTableFilterComposer,
+    $$AppSettingsTableOrderingComposer,
+    $$AppSettingsTableAnnotationComposer,
+    $$AppSettingsTableCreateCompanionBuilder,
+    $$AppSettingsTableUpdateCompanionBuilder,
+    (AppSetting, BaseReferences<_$AppDatabase, $AppSettingsTable, AppSetting>),
+    AppSetting,
+    PrefetchHooks Function()>;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -2665,4 +3021,6 @@ class $AppDatabaseManager {
       $$UserRabbiPermissionsTableTableManager(_db, _db.userRabbiPermissions);
   $$TransfersTableTableManager get transfers =>
       $$TransfersTableTableManager(_db, _db.transfers);
+  $$AppSettingsTableTableManager get appSettings =>
+      $$AppSettingsTableTableManager(_db, _db.appSettings);
 }

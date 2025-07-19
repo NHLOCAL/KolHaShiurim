@@ -37,3 +37,13 @@ class Transfers extends Table {
   TextColumn get destinationFile => text()();
   DateTimeColumn get timestamp => dateTime()();
 }
+
+@DataClassName('AppSetting')
+class AppSettings extends Table {
+  IntColumn get id => integer().withDefault(const Constant(1))();
+  BoolColumn get convertToMp3 => boolean().withDefault(const Constant(false))();
+  IntColumn get mp3Bitrate => integer().withDefault(const Constant(128))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}

@@ -13,7 +13,7 @@ class AdminPanelScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('פאנל ניהול'),
@@ -29,6 +29,7 @@ class AdminPanelScreen extends ConsumerWidget {
               Tab(icon: Icon(Icons.person_outline), text: 'משתמשים'),
               Tab(icon: Icon(Icons.mic_external_on_outlined), text: 'רבנים'),
               Tab(icon: Icon(Icons.usb_outlined), text: 'התקנים'),
+              Tab(icon: Icon(Icons.settings_outlined), text: 'הגדרות'),
             ],
           ),
         ),
@@ -38,6 +39,7 @@ class AdminPanelScreen extends ConsumerWidget {
             _UsersManagementTab(),
             _RabbisManagementTab(),
             _DevicesManagementTab(),
+            _SettingsManagementTab(),
           ],
         ),
       ),
@@ -45,7 +47,6 @@ class AdminPanelScreen extends ConsumerWidget {
   }
 }
 
-// Helper for delete confirmation
 void _showDeleteConfirmation(BuildContext context, String itemType,
     String itemName, VoidCallback onDelete) {
   showDialog(
@@ -685,6 +686,92 @@ class _DevicesManagementTab extends ConsumerWidget {
           },
         );
       },
+    );
+  }
+}
+
+class _SettingsManagementTab extends ConsumerWidget {
+  const _SettingsManagementTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settingsAsync = ref.watch(appSettingsProvider);
+
+    return Scaffold(
+      body: settingsAsync.when(
+        data: (settings) {
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'הגדרות המרה ל-MP3',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const Divider(height: 24),
+                      SwitchListTile(
+                        title: const Text('המר קבצים ל-MP3 בעת ההעתקה'),
+                        subtitle: const Text(
+                            'הפעלה תגרום להמרת כל קובץ שמע לפורמט MP3. דורש התקנת ffmpeg.'),
+                        value: settings.convertToMp3,
+                        onChanged: (value) {
+                          ref.read(databaseProvider).updateAppSettings(
+                                AppSettingsCompanion(
+                                    convertToMp3: drift.Value(value)),
+                              );
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      AnimatedOpacity(
+                        duration: const Duration(milliseconds: 300),
+                        opacity: settings.convertToMp3 ? 1.0 : 0.4,
+                        child: IgnorePointer(
+                          ignoring: !settings.convertToMp3,
+                          child: DropdownButtonFormField<int>(
+                            value: settings.mp3Bitrate,
+                            decoration: const InputDecoration(
+                              labelText: 'איכות (Bitrate)',
+                              border: OutlineInputBorder(),
+                            ),
+                            items: const [
+                              DropdownMenuItem(
+                                  value: 64, child: Text('נמוכה (64kbps)')),
+                              DropdownMenuItem(
+                                  value: 128, child: Text('בינונית (128kbps)')),
+                              DropdownMenuItem(
+                                  value: 192, child: Text('גבוהה (192kbps)')),
+                              DropdownMenuItem(
+                                  value: 256,
+                                  child: Text('גבוהה מאוד (256kbps)')),
+                              DropdownMenuItem(
+                                  value: 320, child: Text('מעולה (320kbps)')),
+                            ],
+                            onChanged: (value) {
+                              if (value != null) {
+                                ref.read(databaseProvider).updateAppSettings(
+                                      AppSettingsCompanion(
+                                          mp3Bitrate: drift.Value(value)),
+                                    );
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, st) => Center(child: Text('Error loading settings: $e')),
+      ),
     );
   }
 }

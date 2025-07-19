@@ -106,3 +106,7 @@ final allRabbisProvider = StreamProvider<List<Rabbi>>((ref) {
 final allDevicesProvider = StreamProvider<List<DeviceWithUser>>((ref) {
   return ref.watch(databaseProvider).watchAllDevicesWithUser();
 });
+
+final appSettingsProvider = StreamProvider<AppSetting>((ref) {
+  return ref.watch(databaseProvider).watchAppSettings();
+});

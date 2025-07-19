@@ -49,6 +49,7 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
   JewishDate _selectedDate = JewishDate();
   final _topicController = TextEditingController();
   bool _isCopying = false;
+  AppSetting? _appSettings;
 
   final List<List<String>> _hebrewKeys = const [
     ['-', '0', '9', '8', '7', '6', '5', '4', '3', '2', '1'],
@@ -56,6 +57,21 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
     [',', 'ף', 'ך', 'ל', 'ח', 'י', 'ע', 'כ', 'ג', 'ד', 'ש'],
     ['.', 'ץ', 'ת', 'צ', 'מ', 'נ', 'ה', 'ב', 'ס', 'ז'],
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    final settings = await ref.read(databaseProvider).getAppSettings();
+    if (mounted) {
+      setState(() {
+        _appSettings = settings;
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -80,12 +96,15 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
     final dateStr = formatter.format(_selectedDate).replaceAll("'", "׳");
     final topic = _topicController.text.trim();
     final sanitizedTopic = topic.replaceAll(RegExp(r'[\/*?:"><|]'), '');
-    final extension = p.extension(_selectedFile!.path);
+    final extension = (_appSettings?.convertToMp3 ?? false)
+        ? '.mp3'
+        : p.extension(_selectedFile!.path);
     return '$dateStr - ${_selectedRabbi!.name}${sanitizedTopic.isNotEmpty ? ' - $sanitizedTopic' : ''}$extension';
   }
 
   Future<void> _copyFile() async {
-    if (_selectedFile == null || _selectedRabbi == null) return;
+    if (_selectedFile == null || _selectedRabbi == null || _appSettings == null)
+      return;
 
     setState(() => _isCopying = true);
     ref.read(_lastCopiedFileNameProvider.notifier).state = null;
@@ -97,12 +116,22 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
       final newFileName = _getNewFileName();
       final destinationDirectory = _selectedRabbi!.targetPath;
       final destinationPath = p.join(destinationDirectory, newFileName);
+      final fileService = ref.read(fileServiceProvider);
 
-      await ref.read(fileServiceProvider).copyFile(
-            sourceFile: _selectedFile!,
-            destinationDirectory: destinationDirectory,
-            newFileName: newFileName,
-          );
+      if (_appSettings!.convertToMp3) {
+        await fileService.convertAndCopyFile(
+          sourceFile: _selectedFile!,
+          destinationDirectory: destinationDirectory,
+          newFileName: newFileName,
+          bitrate: _appSettings!.mp3Bitrate,
+        );
+      } else {
+        await fileService.copyFile(
+          sourceFile: _selectedFile!,
+          destinationDirectory: destinationDirectory,
+          newFileName: newFileName,
+        );
+      }
 
       await authState.maybeWhen(
         user: (user, device, mountPath) async {
@@ -260,6 +289,12 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
     final theme = Theme.of(context);
     final buttonColor = theme.colorScheme.secondaryContainer;
     final buttonTextColor = theme.colorScheme.onSecondaryContainer;
+
+    if (_appSettings == null) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(
