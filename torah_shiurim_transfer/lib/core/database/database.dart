@@ -20,7 +20,23 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2; // <--- שינוי 1: העלאת הגרסה
+
+  @override
+  MigrationStrategy get migration {
+    // <--- שינוי 2: הוספת אסטרטגיית מיגרציה
+    return MigrationStrategy(
+      onCreate: (Migrator m) async {
+        await m.createAll();
+      },
+      onUpgrade: (Migrator m, int from, int to) async {
+        if (from == 1) {
+          // מגרסה 1 ל-2 הוספנו את טבלת ההגדרות
+          await m.createTable(appSettings);
+        }
+      },
+    );
+  }
 
   Future<List<User>> getAllUsers() => select(users).get();
   Stream<List<User>> watchAllUsers() => select(users).watch();
@@ -98,7 +114,8 @@ class AppDatabase extends _$AppDatabase {
         .getSingleOrNull();
     if (setting == null) {
       final defaultSettings = AppSettingsCompanion.insert(id: const Value(1));
-      await into(appSettings).insert(defaultSettings);
+      await into(appSettings)
+          .insert(defaultSettings, mode: InsertMode.insertOrIgnore);
       setting =
           await (select(appSettings)..where((s) => s.id.equals(1))).getSingle();
     }
