@@ -332,7 +332,7 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
                                 const SizedBox(height: 16),
                                 ListTile(
                                   title: Text(
-                                    'תאריך השיעור: ${HebrewDateFormatter().format(_selectedDate)}',
+                                    'תאריך השיעור: ${(HebrewDateFormatter()..hebrewFormat = true).format(_selectedDate)}',
                                   ),
                                   trailing: const Icon(Icons.calendar_today),
                                   onTap: _pickHebrewDate,
