@@ -52,7 +52,7 @@ class MyApp extends ConsumerWidget {
       darkTheme: ThemeData.dark(useMaterial3: true).copyWith(
         appBarTheme: const AppBarTheme(centerTitle: true),
       ),
-      themeMode: ThemeMode.system,
+      themeMode: ThemeMode.light,
       locale: const Locale('he', 'IL'),
       supportedLocales: const [
         Locale('he', 'IL'),
