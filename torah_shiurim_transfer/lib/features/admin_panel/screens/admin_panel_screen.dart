@@ -51,7 +51,7 @@ void _showDeleteConfirmation(BuildContext context, String itemType,
   showDialog(
     context: context,
     builder: (context) => AlertDialog(
-      title: Text('אישור מחיקה'),
+      title: const Text('אישור מחיקה'),
       content:
           Text('האם למחוק את ה$itemType "$itemName"?\nפעולה זו אינה הפיכה.'),
       actions: [
