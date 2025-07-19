@@ -33,6 +33,7 @@ class AdminPanelScreen extends ConsumerWidget {
           ),
         ),
         body: const TabBarView(
+          physics: NeverScrollableScrollPhysics(),
           children: [
             _UsersManagementTab(),
             _RabbisManagementTab(),
@@ -44,7 +45,36 @@ class AdminPanelScreen extends ConsumerWidget {
   }
 }
 
-// --- Users Management Tab ---
+// Helper for delete confirmation
+void _showDeleteConfirmation(BuildContext context, String itemType,
+    String itemName, VoidCallback onDelete) {
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text('אישור מחיקה'),
+      content:
+          Text('האם למחוק את ה$itemType "$itemName"?\nפעולה זו אינה הפיכה.'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('ביטול'),
+        ),
+        FilledButton.tonal(
+          style: FilledButton.styleFrom(
+            backgroundColor: Theme.of(context).colorScheme.errorContainer,
+            foregroundColor: Theme.of(context).colorScheme.onErrorContainer,
+          ),
+          onPressed: () {
+            onDelete();
+            Navigator.of(context).pop();
+          },
+          child: const Text('מחק'),
+        ),
+      ],
+    ),
+  );
+}
+
 class _UsersManagementTab extends ConsumerWidget {
   const _UsersManagementTab();
 
@@ -52,38 +82,47 @@ class _UsersManagementTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final usersAsync = ref.watch(allUsersProvider);
     return Scaffold(
-      floatingActionButton: FloatingActionButton(
-        child: const Icon(Icons.add),
+      floatingActionButton: FloatingActionButton.extended(
+        icon: const Icon(Icons.add),
+        label: const Text('הוסף משתמש'),
         onPressed: () => _showUserDialog(context, ref),
       ),
       body: usersAsync.when(
         data: (users) => ListView.builder(
+          padding: const EdgeInsets.all(8),
           itemCount: users.length,
           itemBuilder: (context, index) {
             final user = users[index];
-            return ListTile(
-              leading:
-                  Icon(user.isAdmin ? Icons.shield_outlined : Icons.person),
-              title: Text(user.name),
-              subtitle: Text(user.isAdmin ? 'מנהל' : 'משתמש רגיל'),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (!user.isAdmin)
-                    TextButton(
-                      child: const Text('הרשאות'),
-                      onPressed: () =>
-                          _showPermissionsDialog(context, ref, user),
+            return Card(
+              margin: const EdgeInsets.symmetric(vertical: 4),
+              child: ListTile(
+                leading:
+                    Icon(user.isAdmin ? Icons.shield_outlined : Icons.person),
+                title: Text(user.name,
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text(user.isAdmin ? 'מנהל' : 'משתמש רגיל'),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (!user.isAdmin)
+                      TextButton(
+                        child: const Text('הרשאות'),
+                        onPressed: () =>
+                            _showPermissionsDialog(context, ref, user),
+                      ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline),
+                      color: Theme.of(context).colorScheme.error,
+                      tooltip: 'מחק משתמש',
+                      onPressed: () => _showDeleteConfirmation(
+                          context, 'משתמש', user.name, () {
+                        ref.read(databaseProvider).deleteUser(user.id);
+                      }),
                     ),
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline),
-                    onPressed: () async {
-                      await ref.read(databaseProvider).deleteUser(user.id);
-                    },
-                  ),
-                ],
+                  ],
+                ),
+                onTap: () => _showUserDialog(context, ref, user: user),
               ),
-              onTap: () => _showUserDialog(context, ref, user: user),
             );
           },
         ),
@@ -119,12 +158,16 @@ class _UsersManagementTab extends ConsumerWidget {
                   children: [
                     TextFormField(
                       controller: nameController,
-                      decoration: const InputDecoration(labelText: 'שם משתמש'),
+                      decoration: const InputDecoration(
+                          labelText: 'שם משתמש', border: OutlineInputBorder()),
                       validator: (v) => v!.isEmpty ? 'שדה חובה' : null,
+                      textAlign: TextAlign.start,
                     ),
+                    const SizedBox(height: 16),
                     CheckboxListTile(
                       title: const Text('האם מנהל?'),
                       value: isAdmin,
+                      controlAffinity: ListTileControlAffinity.leading,
                       onChanged: (value) {
                         if (value != null) {
                           setState(() {
@@ -214,6 +257,7 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
                     return CheckboxListTile(
                       value: isSelected,
                       title: Text(rabbi.name),
+                      controlAffinity: ListTileControlAffinity.leading,
                       onChanged: (checked) {
                         setState(() {
                           if (checked == true) {
@@ -235,7 +279,7 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('ביטול'),
         ),
-        ElevatedButton(
+        FilledButton(
           onPressed: _isLoading
               ? null
               : () async {
@@ -256,7 +300,6 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
   }
 }
 
-// --- Rabbis Management Tab ---
 class _RabbisManagementTab extends ConsumerWidget {
   const _RabbisManagementTab();
 
@@ -264,26 +307,35 @@ class _RabbisManagementTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final rabbisAsync = ref.watch(allRabbisProvider);
     return Scaffold(
-      floatingActionButton: FloatingActionButton(
-        child: const Icon(Icons.add),
+      floatingActionButton: FloatingActionButton.extended(
+        icon: const Icon(Icons.add),
+        label: const Text('הוסף רב'),
         onPressed: () => _showRabbiDialog(context, ref),
       ),
       body: rabbisAsync.when(
         data: (rabbis) => ListView.builder(
+          padding: const EdgeInsets.all(8),
           itemCount: rabbis.length,
           itemBuilder: (context, index) {
             final rabbi = rabbis[index];
-            return ListTile(
-              leading: const Icon(Icons.folder_special_outlined),
-              title: Text(rabbi.name),
-              subtitle: Text('נתיב: ${rabbi.targetPath}'),
-              trailing: IconButton(
-                icon: const Icon(Icons.delete_outline),
-                onPressed: () async {
-                  await ref.read(databaseProvider).deleteRabbi(rabbi.id);
-                },
+            return Card(
+              margin: const EdgeInsets.symmetric(vertical: 4),
+              child: ListTile(
+                leading: const Icon(Icons.folder_special_outlined),
+                title: Text(rabbi.name,
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text('נתיב: ${rabbi.targetPath}'),
+                trailing: IconButton(
+                  icon: const Icon(Icons.delete_outline),
+                  color: Theme.of(context).colorScheme.error,
+                  tooltip: 'מחק רב',
+                  onPressed: () =>
+                      _showDeleteConfirmation(context, 'רב', rabbi.name, () {
+                    ref.read(databaseProvider).deleteRabbi(rabbi.id);
+                  }),
+                ),
+                onTap: () => _showRabbiDialog(context, ref, rabbi: rabbi),
               ),
-              onTap: () => _showRabbiDialog(context, ref, rabbi: rabbi),
             );
           },
         ),
@@ -309,15 +361,19 @@ class _RabbisManagementTab extends ConsumerWidget {
             children: [
               TextFormField(
                 controller: nameController,
-                decoration: const InputDecoration(labelText: 'שם הרב'),
+                decoration: const InputDecoration(
+                    labelText: 'שם הרב', border: OutlineInputBorder()),
                 validator: (v) => v!.isEmpty ? 'שדה חובה' : null,
+                textAlign: TextAlign.start,
               ),
+              const SizedBox(height: 16),
               TextFormField(
                 controller: pathController,
-                readOnly: true, // Make it read-only to force using the button
+                readOnly: true,
                 decoration: InputDecoration(
                   labelText: 'נתיב יעד (במחשב)',
-                  suffixIcon: IconButton(
+                  border: const OutlineInputBorder(),
+                  prefixIcon: IconButton(
                     icon: const Icon(Icons.folder_open),
                     onPressed: () async {
                       String? selectedDirectory =
@@ -340,7 +396,6 @@ class _RabbisManagementTab extends ConsumerWidget {
           FilledButton(
             onPressed: () async {
               if (formKey.currentState!.validate()) {
-                // FIXED: Removed the incorrect 'drift.' prefix.
                 final companion = RabbisCompanion(
                   name: drift.Value(nameController.text),
                   targetPath: drift.Value(pathController.text),
@@ -362,7 +417,6 @@ class _RabbisManagementTab extends ConsumerWidget {
   }
 }
 
-// --- Devices Management Tab ---
 class _DevicesManagementTab extends ConsumerWidget {
   const _DevicesManagementTab();
 
@@ -370,30 +424,39 @@ class _DevicesManagementTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final devicesAsync = ref.watch(allDevicesProvider);
     return Scaffold(
-      floatingActionButton: FloatingActionButton(
-        child: const Icon(Icons.add),
+      floatingActionButton: FloatingActionButton.extended(
+        icon: const Icon(Icons.add),
+        label: const Text('הוסף התקן'),
         onPressed: () => _showDeviceDialog(context, ref),
       ),
       body: devicesAsync.when(
         data: (devices) => ListView.builder(
+          padding: const EdgeInsets.all(8.0),
           itemCount: devices.length,
           itemBuilder: (context, index) {
             final deviceWithUser = devices[index];
             final device = deviceWithUser.device;
             final user = deviceWithUser.user;
-            return ListTile(
-              leading: const Icon(Icons.memory),
-              title: Text('התקן: ${device.serialNumber}'),
-              subtitle: Text(
-                  'משוייך ל: ${user.name}\nנתיב מקור: ${device.sourcePath}'),
-              isThreeLine: true,
-              trailing: IconButton(
-                icon: const Icon(Icons.delete_outline),
-                onPressed: () async {
-                  await ref.read(databaseProvider).deleteDevice(device.id);
-                },
+            return Card(
+              margin: const EdgeInsets.symmetric(vertical: 4),
+              child: ListTile(
+                leading: const Icon(Icons.memory),
+                title: Text('מספר סידורי: ${device.serialNumber}',
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text(
+                    'משוייך ל: ${user.name}\nנתיב מקור: ${device.sourcePath.isEmpty ? 'שורש הכונן' : device.sourcePath}'),
+                isThreeLine: true,
+                trailing: IconButton(
+                  icon: const Icon(Icons.delete_outline),
+                  color: Theme.of(context).colorScheme.error,
+                  tooltip: 'מחק התקן',
+                  onPressed: () => _showDeleteConfirmation(
+                      context, 'התקן', device.serialNumber, () {
+                    ref.read(databaseProvider).deleteDevice(device.id);
+                  }),
+                ),
+                onTap: () => _showDeviceDialog(context, ref, device: device),
               ),
-              onTap: () => _showDeviceDialog(context, ref, device: device),
             );
           },
         ),
@@ -412,7 +475,7 @@ class _DevicesManagementTab extends ConsumerWidget {
     final formKey = GlobalKey<FormState>();
 
     bool isLoading = false;
-    bool isEditingSerial = false;
+    bool isEditingSerial = device == null;
 
     showDialog(
       context: context,
@@ -426,147 +489,155 @@ class _DevicesManagementTab extends ConsumerWidget {
               title: Text(device == null ? 'הוספת התקן חדש' : 'עריכת התקן'),
               content: Form(
                 key: formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ElevatedButton.icon(
-                      icon: const Icon(Icons.folder_open),
-                      label:
-                          Text(isLoading ? "אנא המתן..." : "בחר תיקיית מקור"),
-                      onPressed: isLoading
-                          ? null
-                          : () async {
-                              setState(() => isLoading = true);
-                              try {
-                                // 1. Let user pick a directory.
-                                final selectedPath =
-                                    await FilePicker.platform.getDirectoryPath(
-                                  lockParentWindow: true,
-                                  dialogTitle: 'בחר תיקיית מקור מההתקן החיצוני',
-                                );
-                                if (selectedPath == null) {
-                                  setState(() => isLoading = false);
-                                  return; // User canceled.
-                                }
-
-                                // 2. Find the drive that contains this path.
-                                final devices = await DeviceService()
-                                    .watchConnectedDevices()
-                                    .first;
-                                if (devices.isEmpty) {
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                          content: Text(
-                                              "לא נמצאו כוננים חיצוניים.")),
-                                    );
-                                  }
-                                  setState(() => isLoading = false);
-                                  return;
-                                }
-
-                                ConnectedDeviceInfo? drive;
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.drive_folder_upload_outlined),
+                        label: Text(isLoading
+                            ? "נא המתן..."
+                            : "אתר התקן ובחר תיקיית מקור"),
+                        style: ElevatedButton.styleFrom(
+                            minimumSize: const Size(double.infinity, 48)),
+                        onPressed: isLoading
+                            ? null
+                            : () async {
+                                setState(() => isLoading = true);
                                 try {
-                                  drive = devices.firstWhere((d) =>
-                                      selectedPath.startsWith(d.mountPath));
-                                } catch (e) {
-                                  drive = null;
-                                }
+                                  final selectedPath = await FilePicker.platform
+                                      .getDirectoryPath(
+                                    lockParentWindow: true,
+                                    dialogTitle:
+                                        'בחר תיקיית מקור מההתקן החיצוני',
+                                  );
+                                  if (selectedPath == null) {
+                                    setState(() => isLoading = false);
+                                    return;
+                                  }
 
-                                if (drive == null) {
+                                  final devices = await DeviceService()
+                                      .watchConnectedDevices()
+                                      .first;
+                                  if (devices.isEmpty) {
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                        const SnackBar(
+                                            content: Text(
+                                                "לא נמצאו כוננים חיצוניים.")),
+                                      );
+                                    }
+                                    setState(() => isLoading = false);
+                                    return;
+                                  }
+
+                                  ConnectedDeviceInfo? drive;
+                                  try {
+                                    drive = devices.firstWhere((d) =>
+                                        selectedPath.startsWith(d.mountPath));
+                                  } catch (e) {
+                                    drive = null;
+                                  }
+
+                                  if (drive == null) {
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                        const SnackBar(
+                                            content: Text(
+                                                "התיקיה שנבחרה אינה נמצאת על כונן חיצוני מזוהה.")),
+                                      );
+                                    }
+                                    setState(() => isLoading = false);
+                                    return;
+                                  }
+
+                                  String relativePath = selectedPath
+                                      .substring(drive.mountPath.length)
+                                      .trim();
+                                  if (relativePath.startsWith(r'\') ||
+                                      relativePath.startsWith('/')) {
+                                    relativePath = relativePath.substring(1);
+                                  }
+
                                   if (context.mounted) {
+                                    setState(() {
+                                      serialController.text =
+                                          drive!.serialNumber;
+                                      sourcePathController.text = relativePath;
+                                      isLoading = false;
+                                      isEditingSerial = false;
+                                    });
+                                  }
+                                } catch (e) {
+                                  if (context.mounted) {
+                                    setState(() => isLoading = false);
                                     ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                          content: Text(
-                                              "התיקיה שנבחרה אינה נמצאת על כונן חיצוני מזוהה.")),
+                                      SnackBar(
+                                        content: Text('שגיאה: $e'),
+                                        backgroundColor: Colors.red,
+                                      ),
                                     );
                                   }
-                                  setState(() => isLoading = false);
-                                  return;
                                 }
-
-                                // 3. Calculate relative path.
-                                String relativePath = selectedPath
-                                    .substring(drive.mountPath.length)
-                                    .trim();
-                                if (relativePath.startsWith(r'\')) {
-                                  relativePath = relativePath.substring(1);
-                                }
-
-                                // 4. Update controllers with setState
-                                if (context.mounted) {
-                                  setState(() {
-                                    serialController.text = drive!.serialNumber;
-                                    sourcePathController.text = relativePath;
-                                    isLoading = false;
-                                  });
-                                }
-                              } catch (e) {
-                                if (context.mounted) {
-                                  setState(() => isLoading = false);
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text('שגיאה: $e'),
-                                      backgroundColor: Colors.red,
-                                    ),
-                                  );
-                                }
-                              }
+                              },
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: serialController,
+                        readOnly: !isEditingSerial,
+                        decoration: InputDecoration(
+                          labelText: 'מספר סידורי',
+                          border: const OutlineInputBorder(),
+                          prefixIcon: IconButton(
+                            icon: Icon(
+                                isEditingSerial ? Icons.lock_open : Icons.edit),
+                            onPressed: () {
+                              setState(() {
+                                isEditingSerial = !isEditingSerial;
+                              });
                             },
-                    ),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextFormField(
-                            controller: serialController,
-                            readOnly:
-                                !isEditingSerial, // Only editable when edit mode is on
-                            decoration: InputDecoration(
-                              labelText: 'מספר סידורי',
-                              helperText: isEditingSerial
-                                  ? 'מצב עריכה פעיל'
-                                  : 'לחץ על כפתור העריכה כדי לשנות',
-                            ),
-                            validator: (v) => v!.isEmpty ? 'שדה חובה' : null,
+                            tooltip: isEditingSerial
+                                ? 'נעל עריכה'
+                                : 'אפשר עריכה ידנית',
                           ),
                         ),
-                        IconButton(
-                          icon: Icon(isEditingSerial ? Icons.done : Icons.edit),
-                          onPressed: () {
-                            setState(() {
-                              isEditingSerial = !isEditingSerial;
-                            });
-                          },
-                          tooltip: isEditingSerial
-                              ? 'סיים עריכה'
-                              : 'ערוך מספר סידורי',
+                        validator: (v) => v!.isEmpty ? 'שדה חובה' : null,
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: sourcePathController,
+                        decoration: const InputDecoration(
+                          labelText: 'נתיב מקור (יחסית לכונן)',
+                          hintText: 'לדוגמה: records (או ריק לשורש)',
+                          border: OutlineInputBorder(),
                         ),
-                      ],
-                    ),
-                    TextFormField(
-                      controller: sourcePathController,
-                      decoration: const InputDecoration(
-                        labelText: 'נתיב מקור (יחסית לכונן)',
-                        hintText: 'לדוגמה: records (או ריק לשורש הכונן)',
+                        textAlign: TextAlign.start,
                       ),
-                      // Validator is now optional
-                    ),
-                    usersAsync.when(
-                      data: (users) => DropdownButtonFormField<int>(
-                        value: selectedUserId,
-                        hint: const Text('בחר משתמש לשיוך'),
-                        items: users
-                            .where((u) => !u.isAdmin)
-                            .map((u) => DropdownMenuItem(
-                                value: u.id, child: Text(u.name)))
-                            .toList(),
-                        onChanged: (id) => setState(() => selectedUserId = id),
-                        validator: (id) => id == null ? 'שדה חובה' : null,
+                      const SizedBox(height: 16),
+                      usersAsync.when(
+                        data: (users) => DropdownButtonFormField<int>(
+                          value: selectedUserId,
+                          hint: const Text('בחר משתמש לשיוך'),
+                          decoration: const InputDecoration(
+                            border: OutlineInputBorder(),
+                            labelText: 'משתמש משוייך',
+                          ),
+                          items: users
+                              .where((u) => !u.isAdmin)
+                              .map((u) => DropdownMenuItem(
+                                  value: u.id, child: Text(u.name)))
+                              .toList(),
+                          onChanged: (id) =>
+                              setState(() => selectedUserId = id),
+                          validator: (id) => id == null ? 'שדה חובה' : null,
+                        ),
+                        loading: () => const CircularProgressIndicator(),
+                        error: (e, st) => Text("Error: $e"),
                       ),
-                      loading: () => const CircularProgressIndicator(),
-                      error: (e, st) => Text("Error: $e"),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
               actions: [
