@@ -57,7 +57,7 @@ class AuthStateNotifier extends StateNotifier<AppUserState> {
               device: dbDevice,
               mountPath: connectedDevice.mountPath,
             );
-            // הצג את ממשק המשתמש כאשר התקן מזוהה
+
             WindowActions.showUserPanel();
             return;
           }
@@ -84,14 +84,14 @@ class AuthStateNotifier extends StateNotifier<AppUserState> {
           .getSingle();
     }
     state = AppUserState.admin(admin);
-    // הצג את פאנל הניהול לאחר כניסת מנהל
+
     WindowActions.showAdminPanel();
   }
 
   void logout() {
     state = const AppUserState.loggedOut();
-    // הסתר את החלון בעת התנתקות
-    WindowActions.hide();
+
+    WindowActions.hide(resizeToAdmin: false);
   }
 }
 
