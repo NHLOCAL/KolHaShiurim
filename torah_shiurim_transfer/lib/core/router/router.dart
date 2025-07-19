@@ -5,62 +5,58 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:torah_shiurim_transfer/core/providers/providers.dart';
 import 'package:torah_shiurim_transfer/features/admin_panel/screens/admin_panel_screen.dart';
-import 'package:torah_shiurim_transfer/features/auth/screens/auth_gate_screen.dart';
+// auth_gate_screen יובא מכאן, אין בו צורך יותר
 import 'package:torah_shiurim_transfer/features/user_panel/screens/user_transfer_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authStateProvider);
-  
-  // Create a listenable to refresh the router when auth state changes.
-  final refreshListenable = GoRouterRefreshStream(ref.read(authStateProvider.notifier).stream);
+
+  final refreshListenable =
+      GoRouterRefreshStream(ref.read(authStateProvider.notifier).stream);
   ref.onDispose(refreshListenable.dispose);
 
   return GoRouter(
-    initialLocation: '/',
+    initialLocation: '/admin', // התחל תמיד במסך הניהול
     refreshListenable: refreshListenable,
     routes: [
-      GoRoute(
-        path: '/',
-        builder: (context, state) => const AuthGateScreen(),
-      ),
+      // הסרנו את הנתיב '/' שהוביל למסך הכניסה
       GoRoute(
         path: '/user',
         builder: (context, state) => const UserTransferScreen(),
       ),
       GoRoute(
         path: '/admin',
-        // CHANGED: Point to the new, functional admin panel screen.
         builder: (context, state) => const AdminPanelScreen(),
       ),
     ],
     redirect: (context, state) {
       final currentLocation = state.uri.path;
-      
-      // If we are logged out, we must be on the auth gate screen.
-      if (authState.isLoggedOut) {
-        return currentLocation == '/' ? null : '/';
+
+      // כאשר המשתמש מנותק (התקן נותק), החלון מוסתר על ידי ה-Notifier.
+      // ה-redirect יוודא שהמצב הלוגי חוזר למסך הניהול.
+      if (authState.isLoggedOut && currentLocation != '/admin') {
+        return '/admin';
       }
-      
-      // If we are an admin, we must be on the admin screen.
+
+      // אם המצב הוא "מנהל" והמיקום אינו פאנל הניהול, הפנה אותו לשם.
       if (authState.isAdmin && currentLocation != '/admin') {
         return '/admin';
       }
-      
-      // If we are a user, we must be on the user screen.
+
+      // אם המצב הוא "משתמש" (התקן חובר) והוא לא במסך המשתמש, הפנה אותו לשם.
       if (authState.isUser && currentLocation != '/user') {
         return '/user';
       }
-      
-      // No redirect needed.
+
+      // אין צורך בהפניה
       return null;
     },
   );
 });
 
-// Helper class to notify GoRouter of state changes.
 class GoRouterRefreshStream extends ChangeNotifier {
   late final StreamSubscription<dynamic> _subscription;
-  
+
   GoRouterRefreshStream(Stream<dynamic> stream) {
     _subscription = stream.asBroadcastStream().listen((_) => notifyListeners());
   }
