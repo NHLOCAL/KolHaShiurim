@@ -52,15 +52,14 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
   final _topicController = TextEditingController();
   bool _isCopying = false;
 
-  // ---  תיקון סדר המקשים ---
   // The lists are reversed to display correctly in an RTL Row layout.
+  // The parentheses are also reversed for correct RTL display.
   final List<List<String>> _hebrewKeys = const [
     ['-', '0', '9', '8', '7', '6', '5', '4', '3', '2', '1'],
-    [')', '(', 'פ', 'ם', 'ן', 'ו', 'ט', 'א', 'ר', 'ק', '\''],
+    ['(', ')', 'פ', 'ם', 'ן', 'ו', 'ט', 'א', 'ר', 'ק', '\''],
     [',', 'ף', 'ך', 'ל', 'ח', 'י', 'ע', 'כ', 'ג', 'ד', 'ש'],
     ['.', 'ץ', 'ת', 'צ', 'מ', 'נ', 'ה', 'ב', 'ס', 'ז'],
   ];
-  // --- סוף התיקון ---
 
   @override
   void dispose() {
@@ -207,22 +206,9 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
           padding: const EdgeInsets.symmetric(vertical: 3.0),
           child: Row(
             children: [
+              // --- תיקון סדר, גודל ומיקום ---
               Expanded(
-                flex: 9,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 3.0),
-                  child: ElevatedButton.icon(
-                    style: buttonStyle,
-                    onPressed: () {
-                      _topicController.text += ' ';
-                    },
-                    icon: const Icon(Icons.space_bar),
-                    label: const Text('רווח', style: TextStyle(fontSize: 16)),
-                  ),
-                ),
-              ),
-              Expanded(
-                flex: 1,
+                flex: 2, // Backspace is larger
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 3.0),
                   child: ElevatedButton(
@@ -243,6 +229,21 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
                   ),
                 ),
               ),
+              Expanded(
+                flex: 8, // Spacebar is smaller
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 3.0),
+                  child: ElevatedButton.icon(
+                    style: buttonStyle,
+                    onPressed: () {
+                      _topicController.text += ' ';
+                    },
+                    icon: const Icon(Icons.space_bar),
+                    label: const Text('רווח', style: TextStyle(fontSize: 16)),
+                  ),
+                ),
+              ),
+              // --- סוף התיקון ---
             ],
           ),
         ),
