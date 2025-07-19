@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kosher_dart/kosher_dart.dart';
+import 'package:material_hebrew_date_picker/material_hebrew_date_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:torah_shiurim_transfer/core/database/database.dart';
 import 'package:torah_shiurim_transfer/core/providers/providers.dart';
@@ -55,15 +56,15 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
   }
 
   String _getNewFileName() {
-    if (_selectedRabbi == null || _selectedFile == null) return "שם קובץ...";
+    if (_selectedRabbi == null || _selectedFile == null) return 'שם קובץ...';
     final formatter = HebrewDateFormatter()
       ..hebrewFormat = true
       ..useGershGershayim = true;
     final dateStr = formatter.format(_selectedDate);
     final topic = _topicController.text.trim();
-    final sanitizedTopic = topic.replaceAll(RegExp(r'[\\/*?:"<>|]'), '');
+    final sanitizedTopic = topic.replaceAll(RegExp(r'[\/*?:"><|]'), '');
     final extension = p.extension(_selectedFile!.path);
-    return "$dateStr - ${_selectedRabbi!.name} - ${sanitizedTopic.isNotEmpty ? sanitizedTopic : 'ללא נושא'}$extension";
+    return '$dateStr - ${_selectedRabbi!.name} - ${sanitizedTopic.isNotEmpty ? sanitizedTopic : 'ללא נושא'}$extension';
   }
 
   Future<void> _copyFile() async {
@@ -127,6 +128,39 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
     }
   }
 
+  Future<void> _pickHebrewDate() async {
+    // המרת התאריך היהודי ל־DateTime גרגוריאני עבור הפיקסר
+    final initial = _selectedDate.getGregorianCalendar();
+    // טווח של 10 שנים בלוח העברי
+    final firstHebrew = (JewishDate()
+          ..setJewishDate(5780, JewishDate.TISHREI, 1))
+        .getGregorianCalendar();
+    final lastHebrew = (JewishDate()
+          ..setJewishDate(
+            _selectedDate.getJewishYear() + 1,
+            _selectedDate.getJewishMonth(),
+            _selectedDate.getJewishDayOfMonth(),
+          ))
+        .getGregorianCalendar();
+
+    final DateTime? picked = await showMaterialHebrewDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: firstHebrew,
+      lastDate: lastHebrew,
+      hebrewFormat: true,
+      onDateChange: (date) {
+        // אם צריך callback ביניים
+      },
+    ); // הוסר הפרמטר locale
+
+    if (picked != null) {
+      final newJd = JewishDate();
+      newJd.setDate(picked);
+      setState(() => _selectedDate = newJd);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final sourceFilesAsync = ref.watch(_sourceFilesProvider);
@@ -168,7 +202,7 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
                   Padding(
                     padding: const EdgeInsets.all(8.0),
                     child: Text(
-                      "קבצים מההתקן",
+                      'קבצים מההתקן',
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                   ),
@@ -239,7 +273,7 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
                                 Icons.check_circle,
                                 color: Colors.green,
                               ),
-                              title: const Text("העתקה הושלמה"),
+                              title: const Text('העתקה הושלמה'),
                               subtitle: Text(_lastCopiedFileName!),
                             ),
                           ),
@@ -248,7 +282,7 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
                           const Expanded(
                             child: Center(
                               child: Text(
-                                "בחר קובץ מהרשימה כדי להתחיל.",
+                                'בחר קובץ מהרשימה כדי להתחיל.',
                               ),
                             ),
                           ),
@@ -258,7 +292,7 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
                               children: [
                                 ListTile(
                                   leading: const Icon(Icons.file_present),
-                                  title: const Text("קובץ מקור:"),
+                                  title: const Text('קובץ מקור:'),
                                   subtitle:
                                       Text(p.basename(_selectedFile!.path)),
                                 ),
@@ -298,25 +332,10 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
                                 const SizedBox(height: 16),
                                 ListTile(
                                   title: Text(
-                                    "תאריך השיעור: ${HebrewDateFormatter().format(_selectedDate)}",
+                                    'תאריך השיעור: ${HebrewDateFormatter().format(_selectedDate)}',
                                   ),
                                   trailing: const Icon(Icons.calendar_today),
-                                  onTap: () async {
-                                    final picked = await showDatePicker(
-                                      context: context,
-                                      initialDate:
-                                          _selectedDate.getGregorianCalendar(),
-                                      firstDate: DateTime(2000),
-                                      lastDate: DateTime.now()
-                                          .add(const Duration(days: 365)),
-                                    );
-                                    if (picked != null) {
-                                      setState(
-                                        () => _selectedDate =
-                                            JewishDate.fromDateTime(picked),
-                                      );
-                                    }
-                                  },
+                                  onTap: _pickHebrewDate,
                                 ),
                                 const SizedBox(height: 24),
                                 Text(
@@ -349,9 +368,7 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
                                       strokeWidth: 2,
                                     ),
                                   )
-                                : const Icon(
-                                    Icons.copy_all_outlined,
-                                  ),
+                                : const Icon(Icons.copy_all_outlined),
                             label: const Text('העתק את השיעור'),
                             style: ElevatedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(
