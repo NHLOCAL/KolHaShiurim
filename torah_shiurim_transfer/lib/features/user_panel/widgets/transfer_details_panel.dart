@@ -177,6 +177,82 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
     return finalFileName;
   }
 
+  Future<void> _showPostCopyOptionsDialog(
+      File sourceFile, String newFileName) async {
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final theme = Theme.of(context);
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.green),
+              SizedBox(width: 8),
+              Text('העתקה הושלמה!'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text("הקובץ הועבר בהצלחה בשם:"),
+              const SizedBox(height: 8),
+              Text(
+                newFileName,
+                style:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 16),
+              const Text("מה ברצונך לעשות עם קובץ המקור?"),
+            ],
+          ),
+          actions: [
+            TextButton(
+              child: const Text("השאר קובץ מקור"),
+              onPressed: () => Navigator.of(dialogContext).pop(),
+            ),
+            FilledButton.tonal(
+              style: FilledButton.styleFrom(
+                backgroundColor: theme.colorScheme.errorContainer,
+                foregroundColor: theme.colorScheme.onErrorContainer,
+              ),
+              child: const Text("מחק קובץ מקור"),
+              onPressed: () async {
+                Navigator.of(dialogContext).pop();
+                try {
+                  await sourceFile.delete();
+                  _logService.logUserActivity(
+                      "Source file ${sourceFile.path} deleted successfully by user request.");
+                  scaffoldMessenger.showSnackBar(
+                    const SnackBar(
+                      content: Text("קובץ המקור נמחק בהצלחה."),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+                } catch (e, st) {
+                  _logService.logError(
+                      "Failed to delete source file ${sourceFile.path}", e, st);
+                  scaffoldMessenger.showSnackBar(
+                    SnackBar(
+                      content: Text("שגיאה במחיקת קובץ המקור: $e"),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              },
+            ),
+          ],
+        );
+      },
+    );
+
+    ref.read(lastCopiedFileNameProvider.notifier).state = null;
+    widget.onCopyComplete();
+  }
+
   Future<void> _copyFile() async {
     if (widget.selectedFile == null ||
         _selectedPermission == null ||
@@ -191,9 +267,10 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
 
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     final authState = ref.read(authStateProvider);
+    final sourceFile = widget.selectedFile!;
 
     _logService.logUserActivity(
-        'User initiating file transfer for: ${widget.selectedFile!.path}');
+        'User initiating file transfer for: ${sourceFile.path}');
 
     try {
       final newFileName = await _determineFinalFileName();
@@ -209,17 +286,17 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       final fileService = ref.read(fileServiceProvider);
 
       _logService.logInfo(
-          'Copying/converting file from ${widget.selectedFile!.path} to $destinationPath (Convert to MP3: ${_appSettings!.convertToMp3})');
+          'Copying/converting file from ${sourceFile.path} to $destinationPath (Convert to MP3: ${_appSettings!.convertToMp3})');
       if (_appSettings!.convertToMp3) {
         await fileService.convertAndCopyFile(
-          sourceFile: widget.selectedFile!,
+          sourceFile: sourceFile,
           destinationDirectory: destinationDirectory,
           newFileName: newFileName,
           bitrate: _appSettings!.mp3Bitrate,
         );
       } else {
         await fileService.copyFile(
-          sourceFile: widget.selectedFile!,
+          sourceFile: sourceFile,
           destinationDirectory: destinationDirectory,
           newFileName: newFileName,
         );
@@ -230,28 +307,26 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
           await ref.read(databaseProvider).logTransfer(
                 TransfersCompanion.insert(
                   userId: user.id,
-                  sourceFile: widget.selectedFile!.path,
+                  sourceFile: sourceFile.path,
                   destinationFile: destinationPath,
                   timestamp: DateTime.now(),
                 ),
               );
           _logService.logUserActivity(
-              'Transfer logged for user ${user.name}: Source ${widget.selectedFile!.path}, Destination: $destinationPath');
+              'Transfer logged for user ${user.name}: Source ${sourceFile.path}, Destination: $destinationPath');
         },
         orElse: () {
           _logService.logInfo(
-              'Transfer completed but no user active to log to DB. Source: ${widget.selectedFile!.path}, Destination: $destinationPath');
+              'Transfer completed but no user active to log to DB. Source: ${sourceFile.path}, Destination: $destinationPath');
         },
       );
 
-      ref.read(lastCopiedFileNameProvider.notifier).state = newFileName;
       _logService.logInfo('File transfer successful: $newFileName');
-      widget.onCopyComplete();
+
+      await _showPostCopyOptionsDialog(sourceFile, newFileName);
     } catch (e, st) {
       _logService.logError(
-          'Error during file transfer from ${widget.selectedFile!.path}',
-          e,
-          st);
+          'Error during file transfer from ${sourceFile.path}', e, st);
       scaffoldMessenger.showSnackBar(
         SnackBar(
           content: Text('שגיאה בהעתקת הקובץ: $e'),
