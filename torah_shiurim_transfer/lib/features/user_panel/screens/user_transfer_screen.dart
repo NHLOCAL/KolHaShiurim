@@ -235,12 +235,14 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
     _logService.logUserActivity(
         'User opened Hebrew date picker. Current date: ${_selectedDate.toString()}'); // NEW
     final initial = _selectedDate.getGregorianCalendar();
+
+    final currentJewishYear = JewishDate().getJewishYear();
     final firstHebrew = (JewishDate()
-          ..setJewishDate(5780, JewishDate.TISHREI, 1))
+          ..setJewishDate(currentJewishYear - 30, JewishDate.TISHREI, 1))
         .getGregorianCalendar();
     final lastHebrew = (JewishDate()
           ..setJewishDate(
-            _selectedDate.getJewishYear() + 1,
+            currentJewishYear + 50,
             JewishDate.ELUL,
             29,
           ))
