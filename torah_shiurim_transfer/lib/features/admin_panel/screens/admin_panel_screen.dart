@@ -471,309 +471,327 @@ class _DevicesManagementTab extends ConsumerWidget {
 
   void _showDeviceDialog(BuildContext context, WidgetRef ref,
       {Device? device}) {
-    final serialController = TextEditingController(text: device?.serialNumber);
-    final sourcePathController =
-        TextEditingController(text: device?.sourcePath);
-    int? selectedUserId = device?.userId;
-    final formKey = GlobalKey<FormState>();
-
-    String? detectedMountPath;
-    bool isLoading = false;
-    bool isChangingSerial = false;
-    bool isEditingSerial = device == null;
-
-    String generateRandomSerial() {
-      final random = Random();
-      const chars = 'ABCDEF0123456789';
-      final part1 = String.fromCharCodes(Iterable.generate(
-          4, (_) => chars.codeUnitAt(random.nextInt(chars.length))));
-      final part2 = String.fromCharCodes(Iterable.generate(
-          4, (_) => chars.codeUnitAt(random.nextInt(chars.length))));
-      return '$part1-$part2';
-    }
-
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            final usersAsync = ref.watch(allUsersProvider);
+      builder: (context) => _DeviceDialog(device: device),
+    );
+  }
+}
 
-            return AlertDialog(
-              title: Text(device == null ? 'הוספת התקן חדש' : 'עריכת התקן'),
-              content: Form(
-                key: formKey,
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      ElevatedButton.icon(
-                        icon: const Icon(Icons.drive_folder_upload_outlined),
-                        label: Text(isLoading
-                            ? "נא המתן..."
-                            : "אתר התקן ובחר תיקיית מקור"),
-                        style: ElevatedButton.styleFrom(
-                            minimumSize: const Size(double.infinity, 48)),
-                        onPressed: isLoading
-                            ? null
-                            : () async {
-                                setState(() => isLoading = true);
-                                try {
-                                  final selectedPath = await FilePicker.platform
-                                      .getDirectoryPath(
-                                    lockParentWindow: true,
-                                    dialogTitle:
-                                        'בחר תיקיית מקור מההתקן החיצוני',
-                                  );
-                                  if (selectedPath == null) {
-                                    setState(() => isLoading = false);
-                                    return;
-                                  }
+class _DeviceDialog extends ConsumerStatefulWidget {
+  final Device? device;
+  const _DeviceDialog({this.device});
 
-                                  final devices = await ref
-                                      .read(connectedDevicesProvider.future);
+  @override
+  ConsumerState<_DeviceDialog> createState() => __DeviceDialogState();
+}
 
-                                  if (!context.mounted) return;
+class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
+  late TextEditingController _serialController;
+  late TextEditingController _sourcePathController;
+  int? _selectedUserId;
+  final _formKey = GlobalKey<FormState>();
 
-                                  if (devices.isEmpty) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                          content: Text(
-                                              "לא נמצאו כוננים חיצוניים.")),
-                                    );
-                                    setState(() => isLoading = false);
-                                    return;
-                                  }
+  String? _mountPath;
+  bool _isLoading = false;
+  bool _isChangingSerial = false;
+  bool _isEditingSerial = false;
 
-                                  ConnectedDeviceInfo? drive;
-                                  try {
-                                    drive = devices.firstWhere((d) =>
-                                        selectedPath.startsWith(d.mountPath));
-                                  } catch (e) {
-                                    drive = null;
-                                  }
+  @override
+  void initState() {
+    super.initState();
+    _serialController =
+        TextEditingController(text: widget.device?.serialNumber);
+    _sourcePathController =
+        TextEditingController(text: widget.device?.sourcePath);
+    _selectedUserId = widget.device?.userId;
+    _isEditingSerial = widget.device == null;
 
-                                  if (drive == null) {
-                                    if (context.mounted) {
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
-                                        const SnackBar(
-                                            content: Text(
-                                                "התיקיה שנבחרה אינה נמצאת על כונן חיצוני מזוהה.")),
-                                      );
-                                    }
-                                    setState(() => isLoading = false);
-                                    return;
-                                  }
+    if (widget.device != null) {
+      _findCurrentMountPath();
+    }
+  }
 
-                                  String relativePath = selectedPath
-                                      .substring(drive.mountPath.length)
-                                      .trim();
-                                  if (relativePath.startsWith(r'\') ||
-                                      relativePath.startsWith('/')) {
-                                    relativePath = relativePath.substring(1);
-                                  }
+  @override
+  void dispose() {
+    _serialController.dispose();
+    _sourcePathController.dispose();
+    super.dispose();
+  }
 
-                                  if (context.mounted) {
-                                    setState(() {
-                                      detectedMountPath = drive!.mountPath;
-                                      serialController.text =
-                                          drive.serialNumber;
-                                      sourcePathController.text = relativePath;
-                                      isLoading = false;
-                                      isEditingSerial = false;
-                                    });
-                                  }
-                                } catch (e) {
-                                  if (context.mounted) {
-                                    setState(() => isLoading = false);
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text('שגיאה: $e'),
-                                        backgroundColor: Colors.red,
-                                      ),
-                                    );
-                                  }
-                                }
-                              },
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: serialController,
-                        readOnly: !isEditingSerial,
-                        decoration: InputDecoration(
-                          labelText: 'מספר סידורי',
-                          border: const OutlineInputBorder(),
-                          prefixIcon: IconButton(
-                            icon: Icon(
-                                isEditingSerial ? Icons.lock_open : Icons.edit),
-                            onPressed: () {
-                              setState(() {
-                                isEditingSerial = !isEditingSerial;
-                              });
-                            },
-                            tooltip: isEditingSerial
-                                ? 'נעל עריכה'
-                                : 'אפשר עריכה ידנית',
-                          ),
-                          suffixIcon: isEditingSerial
-                              ? IconButton(
-                                  icon: const Icon(Icons.casino_outlined),
-                                  tooltip: 'צור מספר אקראי',
-                                  onPressed: () {
-                                    serialController.text =
-                                        generateRandomSerial();
-                                  },
-                                )
-                              : null,
-                        ),
-                        validator: (v) {
-                          if (v == null || v.isEmpty) return 'שדה חובה';
-                          final sanitized = v.replaceAll('-', '');
-                          if (!RegExp(r'^[0-9A-Fa-f]{8}$', caseSensitive: false)
-                              .hasMatch(sanitized)) {
-                            return 'פורמט לא תקין (8 תווים הקסדצימליים)';
-                          }
-                          return null;
-                        },
-                      ),
-                      if (Platform.isWindows && detectedMountPath != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8.0),
-                          child: OutlinedButton.icon(
-                            icon: isChangingSerial
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2))
-                                : const Icon(Icons.sync_alt),
-                            label: const Text("שנה מספר סריאלי בהתקן"),
-                            style: OutlinedButton.styleFrom(
-                                minimumSize: const Size(double.infinity, 40),
-                                foregroundColor:
-                                    Theme.of(context).colorScheme.primary),
-                            onPressed: isChangingSerial
-                                ? null
-                                : () async {
-                                    if (formKey.currentState?.validate() ??
-                                        false) {
-                                      setState(() => isChangingSerial = true);
-                                      try {
-                                        final resultMessage = await ref
-                                            .read(deviceServiceProvider)
-                                            .changeVolumeSerialNumber(
-                                                detectedMountPath!,
-                                                serialController.text);
-                                        if (context.mounted) {
-                                          ScaffoldMessenger.of(context)
-                                              .showSnackBar(
-                                            SnackBar(
-                                                content: Text(
-                                                    'הפעולה הצליחה: $resultMessage'),
-                                                backgroundColor: Colors.green),
-                                          );
-                                        }
-                                      } catch (e) {
-                                        if (context.mounted) {
-                                          ScaffoldMessenger.of(context)
-                                              .showSnackBar(
-                                            SnackBar(
-                                                content: Text('שגיאה: $e'),
-                                                backgroundColor: Colors.red),
-                                          );
-                                        }
-                                      } finally {
-                                        if (context.mounted) {
-                                          setState(
-                                              () => isChangingSerial = false);
-                                        }
-                                      }
-                                    }
-                                  },
-                          ),
-                        ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: sourcePathController,
-                        decoration: const InputDecoration(
-                          labelText: 'נתיב מקור (יחסית לכונן)',
-                          hintText: 'לדוגמה: records (או ריק לשורש)',
-                          border: OutlineInputBorder(),
-                        ),
-                        textAlign: TextAlign.start,
-                      ),
-                      const SizedBox(height: 16),
-                      usersAsync.when(
-                        data: (users) => DropdownButtonFormField<int>(
-                          value: selectedUserId,
-                          hint: const Text('בחר משתמש לשיוך'),
-                          decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
-                            labelText: 'משתמש משוייך',
-                          ),
-                          items: users
-                              .where((u) => !u.isAdmin)
-                              .map((u) => DropdownMenuItem(
-                                  value: u.id, child: Text(u.name)))
-                              .toList(),
-                          onChanged: (id) =>
-                              setState(() => selectedUserId = id),
-                          validator: (id) => id == null ? 'שדה חובה' : null,
-                        ),
-                        loading: () => const CircularProgressIndicator(),
-                        error: (e, st) => Text("Error: $e"),
-                      ),
-                    ],
+  Future<void> _findCurrentMountPath() async {
+    if (widget.device == null) return;
+    try {
+      final devices = await ref.read(connectedDevicesProvider.future);
+      final connectedDevice = devices.firstWhere(
+        (d) => d.serialNumber == widget.device!.serialNumber,
+      );
+      if (mounted) {
+        setState(() {
+          _mountPath = connectedDevice.mountPath;
+        });
+      }
+    } catch (e) {
+      // Device is in the database but not currently connected.
+      // _mountPath will remain null, which is the correct behavior.
+    }
+  }
+
+  String _generateRandomSerial() {
+    final random = Random();
+    const chars = 'ABCDEF0123456789';
+    final part1 = String.fromCharCodes(Iterable.generate(
+        4, (_) => chars.codeUnitAt(random.nextInt(chars.length))));
+    final part2 = String.fromCharCodes(Iterable.generate(
+        4, (_) => chars.codeUnitAt(random.nextInt(chars.length))));
+    return '$part1-$part2';
+  }
+
+  Future<void> _locateDevice() async {
+    setState(() => _isLoading = true);
+    try {
+      final selectedPath = await FilePicker.platform.getDirectoryPath(
+        lockParentWindow: true,
+        dialogTitle: 'בחר תיקיית מקור מההתקן החיצוני',
+      );
+      if (selectedPath == null) {
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
+
+      final devices = await ref.read(connectedDevicesProvider.future);
+      if (!mounted) return;
+
+      if (devices.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("לא נמצאו כוננים חיצוניים.")),
+        );
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      ConnectedDeviceInfo? drive;
+      try {
+        drive = devices.firstWhere((d) => selectedPath.startsWith(d.mountPath));
+      } catch (e) {
+        drive = null;
+      }
+
+      if (drive == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content:
+                    Text("התיקיה שנבחרה אינה נמצאת על כונן חיצוני מזוהה.")),
+          );
+        }
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      String relativePath =
+          selectedPath.substring(drive.mountPath.length).trim();
+      if (relativePath.startsWith(r'\') || relativePath.startsWith('/')) {
+        relativePath = relativePath.substring(1);
+      }
+
+      if (mounted) {
+        setState(() {
+          _mountPath = drive!.mountPath;
+          _serialController.text = drive.serialNumber;
+          _sourcePathController.text = relativePath;
+          _isLoading = false;
+          _isEditingSerial = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('שגיאה: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _changeDeviceSerial() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+
+    setState(() => _isChangingSerial = true);
+    try {
+      final resultMessage = await ref
+          .read(deviceServiceProvider)
+          .changeVolumeSerialNumber(_mountPath!, _serialController.text);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('הפעולה הצליחה: $resultMessage'),
+              backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('שגיאה: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isChangingSerial = false);
+      }
+    }
+  }
+
+  Future<void> _saveDevice() async {
+    if (_formKey.currentState!.validate()) {
+      final serialNumber = _serialController.text;
+      final companion = DevicesCompanion(
+        serialNumber: drift.Value(serialNumber),
+        sourcePath: drift.Value(_sourcePathController.text),
+        userId: drift.Value(_selectedUserId!),
+      );
+
+      try {
+        if (widget.device == null) {
+          await ref.read(databaseProvider).insertDevice(companion);
+        } else {
+          await ref.read(databaseProvider).updateDevice(
+              companion.copyWith(id: drift.Value(widget.device!.id)));
+        }
+        if (mounted) {
+          Navigator.of(context).pop();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('שגיאה בשמירה: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final usersAsync = ref.watch(allUsersProvider);
+
+    return AlertDialog(
+      title: Text(widget.device == null ? 'הוספת התקן חדש' : 'עריכת התקן'),
+      content: Form(
+        key: _formKey,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ElevatedButton.icon(
+                icon: const Icon(Icons.drive_folder_upload_outlined),
+                label: Text(
+                    _isLoading ? "נא המתן..." : "אתר התקן ובחר תיקיית מקור"),
+                style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(double.infinity, 48)),
+                onPressed: _isLoading ? null : _locateDevice,
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _serialController,
+                readOnly: !_isEditingSerial,
+                decoration: InputDecoration(
+                  labelText: 'מספר סידורי',
+                  border: const OutlineInputBorder(),
+                  prefixIcon: IconButton(
+                    icon: Icon(_isEditingSerial ? Icons.lock_open : Icons.edit),
+                    onPressed: () {
+                      setState(() {
+                        _isEditingSerial = !_isEditingSerial;
+                      });
+                    },
+                    tooltip:
+                        _isEditingSerial ? 'נעל עריכה' : 'אפשר עריכה ידנית',
+                  ),
+                  suffixIcon: _isEditingSerial
+                      ? IconButton(
+                          icon: const Icon(Icons.casino_outlined),
+                          tooltip: 'צור מספר אקראי',
+                          onPressed: () {
+                            _serialController.text = _generateRandomSerial();
+                          },
+                        )
+                      : null,
+                ),
+                validator: (v) {
+                  if (v == null || v.isEmpty) return 'שדה חובה';
+                  final sanitized = v.replaceAll('-', '');
+                  if (!RegExp(r'^[0-9A-Fa-f]{8}$', caseSensitive: false)
+                      .hasMatch(sanitized)) {
+                    return 'פורמט לא תקין (8 תווים הקסדצימליים)';
+                  }
+                  return null;
+                },
+              ),
+              if (Platform.isWindows && _mountPath != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: OutlinedButton.icon(
+                    icon: _isChangingSerial
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.sync_alt),
+                    label: const Text("שנה מספר סריאלי בהתקן"),
+                    style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(double.infinity, 40),
+                        foregroundColor: Theme.of(context).colorScheme.primary),
+                    onPressed: _isChangingSerial ? null : _changeDeviceSerial,
                   ),
                 ),
-              ),
-              actions: [
-                TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('ביטול')),
-                FilledButton(
-                  onPressed: () async {
-                    if (formKey.currentState!.validate()) {
-                      final serialNumber = serialController.text;
-                      final companion = DevicesCompanion(
-                        serialNumber: drift.Value(serialNumber),
-                        sourcePath: drift.Value(sourcePathController.text),
-                        userId: drift.Value(selectedUserId!),
-                      );
-
-                      try {
-                        if (device == null) {
-                          await ref
-                              .read(databaseProvider)
-                              .insertDevice(companion);
-                        } else {
-                          await ref.read(databaseProvider).updateDevice(
-                              companion.copyWith(id: drift.Value(device.id)));
-                        }
-                        if (context.mounted) {
-                          Navigator.of(context).pop();
-                        }
-                      } catch (e) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('שגיאה בשמירה: $e'),
-                              backgroundColor: Colors.red,
-                            ),
-                          );
-                        }
-                      }
-                    }
-                  },
-                  child: const Text('שמירה'),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _sourcePathController,
+                decoration: const InputDecoration(
+                  labelText: 'נתיב מקור (יחסית לכונן)',
+                  hintText: 'לדוגמה: records (או ריק לשורש)',
+                  border: OutlineInputBorder(),
                 ),
-              ],
-            );
-          },
-        );
-      },
+                textAlign: TextAlign.start,
+              ),
+              const SizedBox(height: 16),
+              usersAsync.when(
+                data: (users) => DropdownButtonFormField<int>(
+                  value: _selectedUserId,
+                  hint: const Text('בחר משתמש לשיוך'),
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    labelText: 'משתמש משוייך',
+                  ),
+                  items: users
+                      .where((u) => !u.isAdmin)
+                      .map((u) =>
+                          DropdownMenuItem(value: u.id, child: Text(u.name)))
+                      .toList(),
+                  onChanged: (id) => setState(() => _selectedUserId = id),
+                  validator: (id) => id == null ? 'שדה חובה' : null,
+                ),
+                loading: () => const CircularProgressIndicator(),
+                error: (e, st) => Text("Error: $e"),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('ביטול')),
+        FilledButton(
+          onPressed: _saveDevice,
+          child: const Text('שמירה'),
+        ),
+      ],
     );
   }
 }
