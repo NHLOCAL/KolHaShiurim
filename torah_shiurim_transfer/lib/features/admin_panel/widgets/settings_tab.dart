@@ -272,6 +272,9 @@ class SettingsTab extends ConsumerWidget {
                             ),
                             items: const [
                               DropdownMenuItem(
+                                  value: 32,
+                                  child: Text('נמוכה מאוד (32kbps)')),
+                              DropdownMenuItem(
                                   value: 64, child: Text('נמוכה (64kbps)')),
                               DropdownMenuItem(
                                   value: 128, child: Text('בינונית (128kbps)')),
