@@ -19,21 +19,21 @@ mixin _$AppUserState {
   @optionalTypeArgs
   TResult when<TResult extends Object?>({
     required TResult Function() loggedOut,
-    required TResult Function(User user) admin,
+    required TResult Function() admin,
     required TResult Function(User user, Device device, String mountPath) user,
   }) =>
       throw _privateConstructorUsedError;
   @optionalTypeArgs
   TResult? whenOrNull<TResult extends Object?>({
     TResult? Function()? loggedOut,
-    TResult? Function(User user)? admin,
+    TResult? Function()? admin,
     TResult? Function(User user, Device device, String mountPath)? user,
   }) =>
       throw _privateConstructorUsedError;
   @optionalTypeArgs
   TResult maybeWhen<TResult extends Object?>({
     TResult Function()? loggedOut,
-    TResult Function(User user)? admin,
+    TResult Function()? admin,
     TResult Function(User user, Device device, String mountPath)? user,
     required TResult orElse(),
   }) =>
@@ -131,7 +131,7 @@ class _$LoggedOutImpl extends _LoggedOut with DiagnosticableTreeMixin {
   @optionalTypeArgs
   TResult when<TResult extends Object?>({
     required TResult Function() loggedOut,
-    required TResult Function(User user) admin,
+    required TResult Function() admin,
     required TResult Function(User user, Device device, String mountPath) user,
   }) {
     return loggedOut();
@@ -141,7 +141,7 @@ class _$LoggedOutImpl extends _LoggedOut with DiagnosticableTreeMixin {
   @optionalTypeArgs
   TResult? whenOrNull<TResult extends Object?>({
     TResult? Function()? loggedOut,
-    TResult? Function(User user)? admin,
+    TResult? Function()? admin,
     TResult? Function(User user, Device device, String mountPath)? user,
   }) {
     return loggedOut?.call();
@@ -151,7 +151,7 @@ class _$LoggedOutImpl extends _LoggedOut with DiagnosticableTreeMixin {
   @optionalTypeArgs
   TResult maybeWhen<TResult extends Object?>({
     TResult Function()? loggedOut,
-    TResult Function(User user)? admin,
+    TResult Function()? admin,
     TResult Function(User user, Device device, String mountPath)? user,
     required TResult orElse(),
   }) {
@@ -206,8 +206,6 @@ abstract class _$$AdminImplCopyWith<$Res> {
   factory _$$AdminImplCopyWith(
           _$AdminImpl value, $Res Function(_$AdminImpl) then) =
       __$$AdminImplCopyWithImpl<$Res>;
-  @useResult
-  $Res call({User user});
 }
 
 /// @nodoc
@@ -220,90 +218,63 @@ class __$$AdminImplCopyWithImpl<$Res>
 
   /// Create a copy of AppUserState
   /// with the given fields replaced by the non-null parameter values.
-  @pragma('vm:prefer-inline')
-  @override
-  $Res call({
-    Object? user = null,
-  }) {
-    return _then(_$AdminImpl(
-      null == user
-          ? _value.user
-          : user // ignore: cast_nullable_to_non_nullable
-              as User,
-    ));
-  }
 }
 
 /// @nodoc
 
 class _$AdminImpl extends _Admin with DiagnosticableTreeMixin {
-  const _$AdminImpl(this.user) : super._();
-
-  @override
-  final User user;
+  const _$AdminImpl() : super._();
 
   @override
   String toString({DiagnosticLevel minLevel = DiagnosticLevel.info}) {
-    return 'AppUserState.admin(user: $user)';
+    return 'AppUserState.admin()';
   }
 
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
-    properties
-      ..add(DiagnosticsProperty('type', 'AppUserState.admin'))
-      ..add(DiagnosticsProperty('user', user));
+    properties..add(DiagnosticsProperty('type', 'AppUserState.admin'));
   }
 
   @override
   bool operator ==(Object other) {
     return identical(this, other) ||
-        (other.runtimeType == runtimeType &&
-            other is _$AdminImpl &&
-            (identical(other.user, user) || other.user == user));
+        (other.runtimeType == runtimeType && other is _$AdminImpl);
   }
 
   @override
-  int get hashCode => Object.hash(runtimeType, user);
-
-  /// Create a copy of AppUserState
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
-  @override
-  @pragma('vm:prefer-inline')
-  _$$AdminImplCopyWith<_$AdminImpl> get copyWith =>
-      __$$AdminImplCopyWithImpl<_$AdminImpl>(this, _$identity);
+  int get hashCode => runtimeType.hashCode;
 
   @override
   @optionalTypeArgs
   TResult when<TResult extends Object?>({
     required TResult Function() loggedOut,
-    required TResult Function(User user) admin,
+    required TResult Function() admin,
     required TResult Function(User user, Device device, String mountPath) user,
   }) {
-    return admin(this.user);
+    return admin();
   }
 
   @override
   @optionalTypeArgs
   TResult? whenOrNull<TResult extends Object?>({
     TResult? Function()? loggedOut,
-    TResult? Function(User user)? admin,
+    TResult? Function()? admin,
     TResult? Function(User user, Device device, String mountPath)? user,
   }) {
-    return admin?.call(this.user);
+    return admin?.call();
   }
 
   @override
   @optionalTypeArgs
   TResult maybeWhen<TResult extends Object?>({
     TResult Function()? loggedOut,
-    TResult Function(User user)? admin,
+    TResult Function()? admin,
     TResult Function(User user, Device device, String mountPath)? user,
     required TResult orElse(),
   }) {
     if (admin != null) {
-      return admin(this.user);
+      return admin();
     }
     return orElse();
   }
@@ -344,16 +315,8 @@ class _$AdminImpl extends _Admin with DiagnosticableTreeMixin {
 }
 
 abstract class _Admin extends AppUserState {
-  const factory _Admin(final User user) = _$AdminImpl;
+  const factory _Admin() = _$AdminImpl;
   const _Admin._() : super._();
-
-  User get user;
-
-  /// Create a copy of AppUserState
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
-  _$$AdminImplCopyWith<_$AdminImpl> get copyWith =>
-      throw _privateConstructorUsedError;
 }
 
 /// @nodoc
@@ -409,7 +372,6 @@ class _$UserImpl extends _User with DiagnosticableTreeMixin {
   final User user;
   @override
   final Device device;
-// The device's configuration from the DB
   @override
   final String mountPath;
 
@@ -454,7 +416,7 @@ class _$UserImpl extends _User with DiagnosticableTreeMixin {
   @optionalTypeArgs
   TResult when<TResult extends Object?>({
     required TResult Function() loggedOut,
-    required TResult Function(User user) admin,
+    required TResult Function() admin,
     required TResult Function(User user, Device device, String mountPath) user,
   }) {
     return user(this.user, device, mountPath);
@@ -464,7 +426,7 @@ class _$UserImpl extends _User with DiagnosticableTreeMixin {
   @optionalTypeArgs
   TResult? whenOrNull<TResult extends Object?>({
     TResult? Function()? loggedOut,
-    TResult? Function(User user)? admin,
+    TResult? Function()? admin,
     TResult? Function(User user, Device device, String mountPath)? user,
   }) {
     return user?.call(this.user, device, mountPath);
@@ -474,7 +436,7 @@ class _$UserImpl extends _User with DiagnosticableTreeMixin {
   @optionalTypeArgs
   TResult maybeWhen<TResult extends Object?>({
     TResult Function()? loggedOut,
-    TResult Function(User user)? admin,
+    TResult Function()? admin,
     TResult Function(User user, Device device, String mountPath)? user,
     required TResult orElse(),
   }) {
@@ -527,7 +489,7 @@ abstract class _User extends AppUserState {
   const _User._() : super._();
 
   User get user;
-  Device get device; // The device's configuration from the DB
+  Device get device;
   String get mountPath;
 
   /// Create a copy of AppUserState

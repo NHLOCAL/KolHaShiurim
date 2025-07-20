@@ -7,15 +7,14 @@ part 'app_user.freezed.dart';
 @freezed
 class AppUserState with _$AppUserState {
   const factory AppUserState.loggedOut() = _LoggedOut;
-  const factory AppUserState.admin(User user) = _Admin;
-  // CHANGED: The user state now includes the runtime-detected mount path.
-  // This separates persistent configuration (Device) from transient state (mountPath).
+  const factory AppUserState.admin() = _Admin;
+
   const factory AppUserState.user({
     required User user,
-    required Device device, // The device's configuration from the DB
-    required String mountPath, // The device's current mount path (e.g., "E:\")
+    required Device device,
+    required String mountPath,
   }) = _User;
-  
+
   const AppUserState._();
 
   bool get isAdmin => this is _Admin;

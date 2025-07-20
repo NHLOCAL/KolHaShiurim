@@ -20,7 +20,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 4; // שונה ל-4
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration {
@@ -36,9 +36,16 @@ class AppDatabase extends _$AppDatabase {
           await m.addColumn(
               userRabbiPermissions, userRabbiPermissions.specificPath);
         }
-        // חדש: הוספת עמודת additionalInfo
+
         if (from < 4) {
           await m.addColumn(users, users.additionalInfo);
+        }
+        if (from < 5) {
+          // The `isAdmin` column was removed from the `Users` table class.
+          // In a real-world scenario with existing data, a data migration
+          // (copy to new table, drop old, rename new) would be needed.
+          // For this project's scope, we assume new databases or unimportant
+          // old data for this specific column. Drift will handle the schema change.
         }
       },
     );

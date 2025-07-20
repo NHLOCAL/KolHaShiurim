@@ -4,13 +4,11 @@ import 'package:torah_shiurim_transfer/models/app_user.dart';
 import 'package:torah_shiurim_transfer/services/device_service.dart';
 import 'package:torah_shiurim_transfer/services/file_service.dart';
 import 'package:torah_shiurim_transfer/services/log_service.dart';
-import 'package:drift/drift.dart';
 import 'package:torah_shiurim_transfer/tray/window_actions.dart';
 
 final databaseProvider = Provider<AppDatabase>((ref) => AppDatabase());
 final logServiceProvider = Provider<LogService>((ref) => LogService());
 
-// הזרקת LogService ל-DeviceService ו-FileService
 final deviceServiceProvider = Provider<DeviceService>((ref) {
   final logService = ref.watch(logServiceProvider);
   return DeviceService(logService);
@@ -44,7 +42,6 @@ class AuthStateNotifier extends StateNotifier<AppUserState> {
 
   void _listenForDevices() {
     _ref.listen(connectedDevicesProvider, (_, asyncValue) {
-      // NEW: Using maybeWhen to handle different states of AsyncValue
       asyncValue.maybeWhen(
         data: (devices) async {
           _logService.logInfo(
@@ -90,13 +87,10 @@ class AuthStateNotifier extends StateNotifier<AppUserState> {
           _logService.logInfo('No user device found, staying logged out.');
         },
         error: (error, stackTrace) {
-          // NEW: This correctly handles the error state
           _logService.logError(
               'Error watching connected devices', error, stackTrace);
         },
         orElse: () {
-          // NEW: Handle other states (like loading) if needed, otherwise do nothing.
-          // For a StreamProvider, this could capture the initial loading state or subsequent loading states.
           _logService.logInfo(
               'Connected devices stream is in a non-data/non-error state (e.g., loading).');
         },
@@ -107,28 +101,8 @@ class AuthStateNotifier extends StateNotifier<AppUserState> {
   Future<void> loginAsAdmin() async {
     _logService.logUserActivity('Attempting to log in as Admin.');
     try {
-      var admin = await (_ref
-              .read(databaseProvider)
-              .select(_ref.read(databaseProvider).users)
-            ..where((u) => u.isAdmin.equals(true)))
-          .getSingleOrNull();
-
-      if (admin == null) {
-        _logService.logInfo('No admin user found, creating default admin.');
-        final adminId = await _ref.read(databaseProvider).insertUser(
-              const UsersCompanion(name: Value('Admin'), isAdmin: Value(true)),
-            );
-        admin = await (_ref
-                .read(databaseProvider)
-                .select(_ref.read(databaseProvider).users)
-              ..where((u) => u.id.equals(adminId)))
-            .getSingle();
-        _logService.logUserActivity(
-            'Default Admin user created with ID: ${admin.id}.');
-      }
-      state = AppUserState.admin(admin);
-      _logService.logUserActivity('Admin user logged in.');
-
+      state = const AppUserState.admin();
+      _logService.logUserActivity('Admin logged in.');
       WindowActions.showAdminPanel();
     } catch (e, st) {
       _logService.logError('Failed to login as Admin.', e, st);

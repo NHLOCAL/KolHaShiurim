@@ -3,8 +3,7 @@ part of 'database.dart';
 class Users extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get name => text().withLength(min: 2, max: 50)();
-  BoolColumn get isAdmin => boolean().withDefault(const Constant(false))();
-  // חדש: שדה למידע נוסף
+
   TextColumn get additionalInfo => text().nullable()();
 }
 
