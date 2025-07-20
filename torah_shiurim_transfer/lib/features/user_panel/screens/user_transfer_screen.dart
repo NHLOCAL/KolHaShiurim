@@ -6,36 +6,33 @@ import 'package:material_hebrew_date_picker/material_hebrew_date_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:torah_shiurim_transfer/core/database/database.dart';
 import 'package:torah_shiurim_transfer/core/providers/providers.dart';
-import 'package:torah_shiurim_transfer/services/log_service.dart'; // NEW
+import 'package:torah_shiurim_transfer/services/log_service.dart';
 
 final _sourceFilesProvider =
     FutureProvider.autoDispose<List<File>>((ref) async {
   final authState = ref.watch(authStateProvider);
   final fileService = ref.watch(fileServiceProvider);
-  final logService = ref.read(logServiceProvider); // NEW: Access log service
+  final logService = ref.read(logServiceProvider);
 
-  ref.watch(
-      _lastCopiedFileNameProvider); // Triggers re-fetch when last copied file changes
+  ref.watch(_lastCopiedFileNameProvider);
 
   return authState.maybeMap(
     user: (userState) async {
       final sourcePath =
           p.join(userState.mountPath, userState.device.sourcePath);
       logService.logInfo(
-          'Fetching audio files from device source path: $sourcePath for user: ${userState.user.name}'); // NEW
+          'Fetching audio files from device source path: $sourcePath for user: ${userState.user.name}');
       try {
-        // NEW: Add try-catch for file operations
         return await fileService.getAudioFiles(sourcePath);
       } catch (e, st) {
-        // NEW: Catch and log error
         logService.logError(
-            'Failed to get audio files from $sourcePath', e, st); // NEW
-        return []; // NEW: Return empty list on error
-      } // NEW
+            'Failed to get audio files from $sourcePath', e, st);
+        return [];
+      }
     },
     orElse: () {
-      logService.logInfo(
-          'No user logged in, returning empty list for source files.'); // NEW
+      logService
+          .logInfo('No user logged in, returning empty list for source files.');
       return [];
     },
   );
@@ -45,17 +42,17 @@ final _allowedRabbisProvider =
     StreamProvider.autoDispose<List<UserPermissionInfo>>((ref) {
   final authState = ref.watch(authStateProvider);
   final db = ref.watch(databaseProvider);
-  final logService = ref.read(logServiceProvider); // NEW: Access log service
+  final logService = ref.read(logServiceProvider);
 
   return authState.maybeMap(
     user: (userState) {
-      logService.logInfo(
-          'Watching permissions for user: ${userState.user.name}'); // NEW
+      logService
+          .logInfo('Watching permissions for user: ${userState.user.name}');
       return db.watchPermissionsForUser(userState.user.id);
     },
     orElse: () {
       logService.logInfo(
-          'No user logged in, returning empty stream for allowed rabbis.'); // NEW
+          'No user logged in, returning empty stream for allowed rabbis.');
       return Stream.value([]);
     },
   );
@@ -77,7 +74,7 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
   final _topicController = TextEditingController();
   bool _isCopying = false;
   AppSetting? _appSettings;
-  late final LogService _logService; // NEW: Declare LogService
+  late final LogService _logService;
 
   final List<List<String>> _hebrewKeys = const [
     ['-', '0', '9', '8', '7', '6', '5', '4', '3', '2', '1'],
@@ -89,28 +86,24 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
   @override
   void initState() {
     super.initState();
-    _logService = ref.read(logServiceProvider); // NEW: Initialize LogService
+    _logService = ref.read(logServiceProvider);
     _loadSettings();
-    _logService.logInfo('User Transfer screen initialized.'); // NEW
+    _logService.logInfo('User Transfer screen initialized.');
   }
 
   Future<void> _loadSettings() async {
-    _logService.logInfo('Loading app settings for user panel.'); // NEW
+    _logService.logInfo('Loading app settings for user panel.');
     try {
-      // NEW: Add try-catch for database operation
       final settings = await ref.read(databaseProvider).getAppSettings();
       if (mounted) {
         setState(() {
           _appSettings = settings;
         });
-        _logService
-            .logInfo('App settings loaded successfully for user panel.'); // NEW
+        _logService.logInfo('App settings loaded successfully for user panel.');
       }
     } catch (e, st) {
-      // NEW: Catch and log error
-      _logService.logError(
-          'Failed to load app settings for user panel', e, st); // NEW
-    } // NEW
+      _logService.logError('Failed to load app settings for user panel', e, st);
+    }
   }
 
   @override
@@ -120,7 +113,7 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
   }
 
   void _resetForm() {
-    _logService.logInfo('Resetting transfer form.'); // NEW
+    _logService.logInfo('Resetting transfer form.');
     setState(() {
       _selectedFile = null;
       _selectedPermission = null;
@@ -385,11 +378,22 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
       );
     }
     _logService.logInfo(
-        'User Transfer screen built for user: $userName, device: $deviceSerial'); // NEW
+        'User Transfer screen built for user: $userName, device: $deviceSerial');
 
     return Scaffold(
       appBar: AppBar(
         title: Text('העברת שיעורים - שלום, $userName'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'התנתקות וסגירת הממשק',
+            onPressed: () {
+              _logService
+                  .logUserActivity('User $userName clicked logout button.');
+              ref.read(authStateProvider.notifier).logout();
+            },
+          ),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(20.0),
           child: Text(
@@ -448,7 +452,7 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
                                           .state = null;
                                     });
                                     _logService.logUserActivity(
-                                        'User selected file: ${file.path}'); // NEW
+                                        'User selected file: ${file.path}');
                                   },
                                 );
                               },
@@ -457,7 +461,7 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
                           const Center(child: CircularProgressIndicator()),
                       error: (err, stack) {
                         _logService.logError(
-                            'Error loading source files', err, stack); // NEW
+                            'Error loading source files', err, stack);
                         return Center(child: Text('שגיאה בטעינת קבצים: $err'));
                       },
                     ),
@@ -562,7 +566,7 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
                     onChanged: (val) {
                       setState(() => _selectedPermission = val);
                       _logService.logUserActivity(
-                          'User selected rabbi: ${val?.rabbi.name}'); // NEW
+                          'User selected rabbi: ${val?.rabbi.name}');
                     },
                     decoration: const InputDecoration(
                         labelText: 'בחר רב', border: OutlineInputBorder()),
@@ -571,7 +575,7 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
                       const Center(child: CircularProgressIndicator()),
                   error: (err, stack) {
                     _logService.logError(
-                        'Error loading allowed rabbis', err, stack); // NEW
+                        'Error loading allowed rabbis', err, stack);
                     return Text('שגיאה: $err');
                   },
                 ),
