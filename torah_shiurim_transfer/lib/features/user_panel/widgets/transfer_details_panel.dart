@@ -99,9 +99,82 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
         ? '.mp3'
         : p.extension(widget.selectedFile!.path);
     final fileName =
-        '$dateStr - ${_selectedPermission!.rabbi.name}${sanitizedTopic.isNotEmpty ? ' - $sanitizedTopic' : ''}$extension';
-    _logService.logInfo('Generated new file name: $fileName');
+        'XX - $dateStr - ${_selectedPermission!.rabbi.name}${sanitizedTopic.isNotEmpty ? ' - $sanitizedTopic' : ''}$extension';
+    _logService.logInfo('Generated new file name preview: $fileName');
     return fileName;
+  }
+
+  Future<String> _determineFinalFileName() async {
+    if (_selectedPermission == null || widget.selectedFile == null) {
+      _logService.logError(
+          "Cannot determine final filename, selection is incomplete.",
+          null,
+          StackTrace.current);
+      throw Exception("Cannot determine filename, selection is incomplete.");
+    }
+
+    // 1. Get base info for filename
+    final formatter = HebrewDateFormatter()
+      ..hebrewFormat = true
+      ..useGershGershayim = false;
+    final dateStr = formatter.format(_selectedDate).replaceAll("'", "׳");
+    final topic = _topicController.text.trim();
+    final sanitizedTopic = topic.replaceAll(RegExp(r'[\/*?:"><|]'), '');
+    final extension = (_appSettings?.convertToMp3 ?? false)
+        ? '.mp3'
+        : p.extension(widget.selectedFile!.path);
+    final rabbiName = _selectedPermission!.rabbi.name;
+
+    // 2. Determine destination directory
+    final baseDirectory = _selectedPermission!.rabbi.targetPath;
+    final subDirectory = _selectedPermission!.specificPath;
+    final destinationDirectory =
+        (subDirectory != null && subDirectory.isNotEmpty)
+            ? p.join(baseDirectory, subDirectory)
+            : baseDirectory;
+
+    // 3. Find next sequential number based on ALL files in the directory
+    int nextNumber = 1;
+    try {
+      final dir = Directory(destinationDirectory);
+      if (await dir.exists()) {
+        int maxNumber = 0;
+        // This regex finds any file starting with a number and a hyphen,
+        // making the numbering global to the folder, regardless of date.
+        final regex = RegExp(r'^(\d+)\s*-');
+
+        await for (final entity in dir.list()) {
+          if (entity is File) {
+            final filename = p.basename(entity.path);
+            final match = regex.firstMatch(filename);
+            if (match != null) {
+              final number = int.tryParse(match.group(1)!);
+              if (number != null && number > maxNumber) {
+                maxNumber = number;
+              }
+            }
+          }
+        }
+        nextNumber = maxNumber + 1;
+      }
+    } catch (e, st) {
+      _logService.logError(
+          "Error determining next file number in '$destinationDirectory'. Defaulting to 1.",
+          e,
+          st);
+      nextNumber = 1; // Fallback on error
+    }
+
+    _logService
+        .logInfo("Determined next file number in folder is $nextNumber.");
+
+    // 4. Format and assemble final name
+    final formattedNumber = nextNumber.toString().padLeft(2, '0');
+    final finalFileName =
+        '$formattedNumber - $dateStr - $rabbiName${sanitizedTopic.isNotEmpty ? ' - $sanitizedTopic' : ''}$extension';
+
+    _logService.logInfo('Determined final file name: $finalFileName');
+    return finalFileName;
   }
 
   Future<void> _copyFile() async {
@@ -123,7 +196,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
         'User initiating file transfer for: ${widget.selectedFile!.path}');
 
     try {
-      final newFileName = _getNewFileName();
+      final newFileName = await _determineFinalFileName();
       final baseDirectory = _selectedPermission!.rabbi.targetPath;
       final subDirectory = _selectedPermission!.specificPath;
 
