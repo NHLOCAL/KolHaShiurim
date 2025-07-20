@@ -35,8 +35,14 @@ class $UsersTable extends Users with TableInfo<$UsersTable, User> {
       defaultConstraints:
           GeneratedColumn.constraintIsAlways('CHECK ("is_admin" IN (0, 1))'),
       defaultValue: const Constant(false));
+  static const VerificationMeta _additionalInfoMeta =
+      const VerificationMeta('additionalInfo');
   @override
-  List<GeneratedColumn> get $columns => [id, name, isAdmin];
+  late final GeneratedColumn<String> additionalInfo = GeneratedColumn<String>(
+      'additional_info', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns => [id, name, isAdmin, additionalInfo];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -60,6 +66,12 @@ class $UsersTable extends Users with TableInfo<$UsersTable, User> {
       context.handle(_isAdminMeta,
           isAdmin.isAcceptableOrUnknown(data['is_admin']!, _isAdminMeta));
     }
+    if (data.containsKey('additional_info')) {
+      context.handle(
+          _additionalInfoMeta,
+          additionalInfo.isAcceptableOrUnknown(
+              data['additional_info']!, _additionalInfoMeta));
+    }
     return context;
   }
 
@@ -75,6 +87,8 @@ class $UsersTable extends Users with TableInfo<$UsersTable, User> {
           .read(DriftSqlType.string, data['${effectivePrefix}name'])!,
       isAdmin: attachedDatabase.typeMapping
           .read(DriftSqlType.bool, data['${effectivePrefix}is_admin'])!,
+      additionalInfo: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}additional_info']),
     );
   }
 
@@ -88,13 +102,21 @@ class User extends DataClass implements Insertable<User> {
   final int id;
   final String name;
   final bool isAdmin;
-  const User({required this.id, required this.name, required this.isAdmin});
+  final String? additionalInfo;
+  const User(
+      {required this.id,
+      required this.name,
+      required this.isAdmin,
+      this.additionalInfo});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
     map['name'] = Variable<String>(name);
     map['is_admin'] = Variable<bool>(isAdmin);
+    if (!nullToAbsent || additionalInfo != null) {
+      map['additional_info'] = Variable<String>(additionalInfo);
+    }
     return map;
   }
 
@@ -103,6 +125,9 @@ class User extends DataClass implements Insertable<User> {
       id: Value(id),
       name: Value(name),
       isAdmin: Value(isAdmin),
+      additionalInfo: additionalInfo == null && nullToAbsent
+          ? const Value.absent()
+          : Value(additionalInfo),
     );
   }
 
@@ -113,6 +138,7 @@ class User extends DataClass implements Insertable<User> {
       id: serializer.fromJson<int>(json['id']),
       name: serializer.fromJson<String>(json['name']),
       isAdmin: serializer.fromJson<bool>(json['isAdmin']),
+      additionalInfo: serializer.fromJson<String?>(json['additionalInfo']),
     );
   }
   @override
@@ -122,19 +148,30 @@ class User extends DataClass implements Insertable<User> {
       'id': serializer.toJson<int>(id),
       'name': serializer.toJson<String>(name),
       'isAdmin': serializer.toJson<bool>(isAdmin),
+      'additionalInfo': serializer.toJson<String?>(additionalInfo),
     };
   }
 
-  User copyWith({int? id, String? name, bool? isAdmin}) => User(
+  User copyWith(
+          {int? id,
+          String? name,
+          bool? isAdmin,
+          Value<String?> additionalInfo = const Value.absent()}) =>
+      User(
         id: id ?? this.id,
         name: name ?? this.name,
         isAdmin: isAdmin ?? this.isAdmin,
+        additionalInfo:
+            additionalInfo.present ? additionalInfo.value : this.additionalInfo,
       );
   User copyWithCompanion(UsersCompanion data) {
     return User(
       id: data.id.present ? data.id.value : this.id,
       name: data.name.present ? data.name.value : this.name,
       isAdmin: data.isAdmin.present ? data.isAdmin.value : this.isAdmin,
+      additionalInfo: data.additionalInfo.present
+          ? data.additionalInfo.value
+          : this.additionalInfo,
     );
   }
 
@@ -143,54 +180,65 @@ class User extends DataClass implements Insertable<User> {
     return (StringBuffer('User(')
           ..write('id: $id, ')
           ..write('name: $name, ')
-          ..write('isAdmin: $isAdmin')
+          ..write('isAdmin: $isAdmin, ')
+          ..write('additionalInfo: $additionalInfo')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, name, isAdmin);
+  int get hashCode => Object.hash(id, name, isAdmin, additionalInfo);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is User &&
           other.id == this.id &&
           other.name == this.name &&
-          other.isAdmin == this.isAdmin);
+          other.isAdmin == this.isAdmin &&
+          other.additionalInfo == this.additionalInfo);
 }
 
 class UsersCompanion extends UpdateCompanion<User> {
   final Value<int> id;
   final Value<String> name;
   final Value<bool> isAdmin;
+  final Value<String?> additionalInfo;
   const UsersCompanion({
     this.id = const Value.absent(),
     this.name = const Value.absent(),
     this.isAdmin = const Value.absent(),
+    this.additionalInfo = const Value.absent(),
   });
   UsersCompanion.insert({
     this.id = const Value.absent(),
     required String name,
     this.isAdmin = const Value.absent(),
+    this.additionalInfo = const Value.absent(),
   }) : name = Value(name);
   static Insertable<User> custom({
     Expression<int>? id,
     Expression<String>? name,
     Expression<bool>? isAdmin,
+    Expression<String>? additionalInfo,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (name != null) 'name': name,
       if (isAdmin != null) 'is_admin': isAdmin,
+      if (additionalInfo != null) 'additional_info': additionalInfo,
     });
   }
 
   UsersCompanion copyWith(
-      {Value<int>? id, Value<String>? name, Value<bool>? isAdmin}) {
+      {Value<int>? id,
+      Value<String>? name,
+      Value<bool>? isAdmin,
+      Value<String?>? additionalInfo}) {
     return UsersCompanion(
       id: id ?? this.id,
       name: name ?? this.name,
       isAdmin: isAdmin ?? this.isAdmin,
+      additionalInfo: additionalInfo ?? this.additionalInfo,
     );
   }
 
@@ -206,6 +254,9 @@ class UsersCompanion extends UpdateCompanion<User> {
     if (isAdmin.present) {
       map['is_admin'] = Variable<bool>(isAdmin.value);
     }
+    if (additionalInfo.present) {
+      map['additional_info'] = Variable<String>(additionalInfo.value);
+    }
     return map;
   }
 
@@ -214,7 +265,8 @@ class UsersCompanion extends UpdateCompanion<User> {
     return (StringBuffer('UsersCompanion(')
           ..write('id: $id, ')
           ..write('name: $name, ')
-          ..write('isAdmin: $isAdmin')
+          ..write('isAdmin: $isAdmin, ')
+          ..write('additionalInfo: $additionalInfo')
           ..write(')'))
         .toString();
   }
@@ -1508,11 +1560,13 @@ typedef $$UsersTableCreateCompanionBuilder = UsersCompanion Function({
   Value<int> id,
   required String name,
   Value<bool> isAdmin,
+  Value<String?> additionalInfo,
 });
 typedef $$UsersTableUpdateCompanionBuilder = UsersCompanion Function({
   Value<int> id,
   Value<String> name,
   Value<bool> isAdmin,
+  Value<String?> additionalInfo,
 });
 
 final class $$UsersTableReferences
@@ -1583,6 +1637,10 @@ class $$UsersTableFilterComposer extends Composer<_$AppDatabase, $UsersTable> {
 
   ColumnFilters<bool> get isAdmin => $composableBuilder(
       column: $table.isAdmin, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get additionalInfo => $composableBuilder(
+      column: $table.additionalInfo,
+      builder: (column) => ColumnFilters(column));
 
   Expression<bool> devicesRefs(
       Expression<bool> Function($$DevicesTableFilterComposer f) f) {
@@ -1666,6 +1724,10 @@ class $$UsersTableOrderingComposer
 
   ColumnOrderings<bool> get isAdmin => $composableBuilder(
       column: $table.isAdmin, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get additionalInfo => $composableBuilder(
+      column: $table.additionalInfo,
+      builder: (column) => ColumnOrderings(column));
 }
 
 class $$UsersTableAnnotationComposer
@@ -1685,6 +1747,9 @@ class $$UsersTableAnnotationComposer
 
   GeneratedColumn<bool> get isAdmin =>
       $composableBuilder(column: $table.isAdmin, builder: (column) => column);
+
+  GeneratedColumn<String> get additionalInfo => $composableBuilder(
+      column: $table.additionalInfo, builder: (column) => column);
 
   Expression<T> devicesRefs<T extends Object>(
       Expression<T> Function($$DevicesTableAnnotationComposer a) f) {
@@ -1781,21 +1846,25 @@ class $$UsersTableTableManager extends RootTableManager<
             Value<int> id = const Value.absent(),
             Value<String> name = const Value.absent(),
             Value<bool> isAdmin = const Value.absent(),
+            Value<String?> additionalInfo = const Value.absent(),
           }) =>
               UsersCompanion(
             id: id,
             name: name,
             isAdmin: isAdmin,
+            additionalInfo: additionalInfo,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
             required String name,
             Value<bool> isAdmin = const Value.absent(),
+            Value<String?> additionalInfo = const Value.absent(),
           }) =>
               UsersCompanion.insert(
             id: id,
             name: name,
             isAdmin: isAdmin,
+            additionalInfo: additionalInfo,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) =>

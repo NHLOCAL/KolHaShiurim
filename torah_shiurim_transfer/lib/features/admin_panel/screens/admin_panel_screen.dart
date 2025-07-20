@@ -2,7 +2,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:drift/drift.dart' as drift;
-import 'package:file_picker/file_picker.dart'; // הוספת ייבוא
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:torah_shiurim_transfer/core/database/database.dart';
@@ -96,6 +96,13 @@ class _UsersManagementTab extends ConsumerWidget {
           itemCount: users.length,
           itemBuilder: (context, index) {
             final user = users[index];
+            // בניית מחרוזת ה-subtitle
+            String subtitleText = user.isAdmin ? 'מנהל' : 'משתמש רגיל';
+            if (user.additionalInfo != null &&
+                user.additionalInfo!.isNotEmpty) {
+              subtitleText += '\nפרטים נוספים: ${user.additionalInfo}';
+            }
+
             return Card(
               margin: const EdgeInsets.symmetric(vertical: 4),
               child: ListTile(
@@ -103,7 +110,9 @@ class _UsersManagementTab extends ConsumerWidget {
                     Icon(user.isAdmin ? Icons.shield_outlined : Icons.person),
                 title: Text(user.name,
                     style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Text(user.isAdmin ? 'מנהל' : 'משתמש רגיל'),
+                subtitle: Text(subtitleText), // שינוי כאן
+                isThreeLine: user.additionalInfo != null &&
+                    user.additionalInfo!.isNotEmpty, // חדש: מאפשר 3 שורות
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -145,6 +154,9 @@ class _UsersManagementTab extends ConsumerWidget {
   void _showUserDialog(BuildContext context, WidgetRef ref, {User? user}) {
     final nameController = TextEditingController(text: user?.name);
     bool isAdmin = user?.isAdmin ?? false;
+    // חדש: בקר עבור מידע נוסף
+    final additionalInfoController =
+        TextEditingController(text: user?.additionalInfo);
     final formKey = GlobalKey<FormState>();
 
     showDialog(
@@ -165,6 +177,17 @@ class _UsersManagementTab extends ConsumerWidget {
                           labelText: 'שם משתמש', border: OutlineInputBorder()),
                       validator: (v) => v!.isEmpty ? 'שדה חובה' : null,
                       textAlign: TextAlign.start,
+                    ),
+                    const SizedBox(height: 16),
+                    // חדש: שדה למידע נוסף
+                    TextFormField(
+                      controller: additionalInfoController,
+                      decoration: const InputDecoration(
+                          labelText: 'פרטים נוספים (טלפון, שיעור, ועד וכו\')',
+                          border: OutlineInputBorder()),
+                      textAlign: TextAlign.start,
+                      maxLines: 3, // מאפשר יותר שורות לטקסט חופשי
+                      minLines: 1,
                     ),
                     const SizedBox(height: 16),
                     CheckboxListTile(
@@ -193,6 +216,11 @@ class _UsersManagementTab extends ConsumerWidget {
                       final companion = UsersCompanion(
                         name: drift.Value(nameController.text),
                         isAdmin: drift.Value(isAdmin),
+                        // חדש: שמירת המידע הנוסף
+                        additionalInfo: drift.Value(
+                            additionalInfoController.text.trim().isEmpty
+                                ? null
+                                : additionalInfoController.text.trim()),
                       );
                       if (user == null) {
                         await ref.read(databaseProvider).insertUser(companion);
@@ -346,8 +374,8 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
                         ),
                         if (isSelected)
                           Padding(
-                            padding: const EdgeInsets.fromLTRB(
-                                16.0, 0, 16.0, 16.0), // שינוי padding
+                            padding:
+                                const EdgeInsets.fromLTRB(16.0, 0, 16.0, 16.0),
                             child: TextFormField(
                               controller: _pathControllers[rabbi.id],
                               decoration: InputDecoration(
@@ -355,7 +383,6 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
                                 hintText: 'לדוגמה: תשפ״ד/שיעורים',
                                 border: const OutlineInputBorder(),
                                 suffixIcon: IconButton(
-                                  // הוספת כפתור "עיון..."
                                   icon: const Icon(Icons.folder_open),
                                   onPressed: () => _pickSpecificPath(rabbi),
                                   tooltip: 'בחר תיקיה מתוך תיקיית הרב',
