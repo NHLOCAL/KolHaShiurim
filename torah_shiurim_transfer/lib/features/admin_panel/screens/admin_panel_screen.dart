@@ -2,7 +2,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:drift/drift.dart' as drift;
-import 'package:file_picker/file_picker.dart';
+import 'package:file_picker/file_picker.dart'; // הוספת ייבוא
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:torah_shiurim_transfer/core/database/database.dart';
@@ -243,6 +243,7 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
   }
 
   Future<void> _loadInitialPermissions() async {
+    // נשתמש ב-getPermissionsForUser כדי לקבל את הנתיבים הספציפיים הקיימים
     final initialPermissions =
         await ref.read(databaseProvider).getPermissionsForUser(widget.user.id);
     if (mounted) {
@@ -250,6 +251,7 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
       final newControllers = <int, TextEditingController>{};
       for (final p in initialPermissions) {
         newSelectedIds.add(p.rabbiId);
+        // ודא שהבקר נוצר רק אם יש נתיב ספציפי או אם הוספת אותו לרשימת הנבחרים
         newControllers[p.rabbiId] = TextEditingController(text: p.specificPath);
       }
       setState(() {
@@ -257,6 +259,49 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
         _pathControllers = newControllers;
         _isLoading = false;
       });
+    }
+  }
+
+  // פונקציה לבחירת תיקיה באמצעות דיאלוג מערכת
+  Future<void> _pickSpecificPath(Rabbi rabbi) async {
+    // נקודת התחלה לדיאלוג - תיקיית היעד הראשית של הרב
+    final initialDirectory = rabbi.targetPath;
+
+    String? selectedDirectory = await FilePicker.platform.getDirectoryPath(
+      initialDirectory: initialDirectory,
+      lockParentWindow: true,
+      dialogTitle: 'בחר תיקיית יעד ספציפית עבור ${rabbi.name}',
+    );
+
+    if (selectedDirectory != null) {
+      // ודא שהנתיב הנבחר נמצא בתוך תיקיית היעד הראשית של הרב
+      if (!selectedDirectory.startsWith(initialDirectory)) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content: Text('יש לבחור תיקיה בתוך תיקיית הרב המוגדרת.')),
+          );
+        }
+        return;
+      }
+
+      // חישוב הנתיב היחסי
+      String relativePath =
+          selectedDirectory.substring(initialDirectory.length);
+
+      // הסרת סלאשים מובילים/סופיים מיותרים והחלפת \ ב /
+      relativePath = relativePath.replaceAll(r'\', '/');
+      if (relativePath.startsWith('/')) {
+        relativePath = relativePath.substring(1);
+      }
+      if (relativePath.endsWith('/')) {
+        relativePath = relativePath.substring(0, relativePath.length - 1);
+      }
+
+      if (mounted) {
+        // עדכון הבקר של שדה הטקסט עם הנתיב היחסי
+        _pathControllers[rabbi.id]?.text = relativePath;
+      }
     }
   }
 
@@ -274,13 +319,16 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
                   shrinkWrap: true,
                   children: rabbis.map<Widget>((rabbi) {
                     final isSelected = _selectedRabbiIds.contains(rabbi.id);
+                    // יצירת בקר אם עדיין לא קיים (למקרה של הוספה חדשה)
+                    _pathControllers.putIfAbsent(
+                        rabbi.id, () => TextEditingController());
                     return Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         CheckboxListTile(
                           value: isSelected,
                           title: Text(rabbi.name),
-                          subtitle: Text(rabbi.targetPath,
+                          subtitle: Text('נתיב בסיס: ${rabbi.targetPath}',
                               textDirection: TextDirection.ltr,
                               textAlign: TextAlign.right),
                           controlAffinity: ListTileControlAffinity.leading,
@@ -288,8 +336,7 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
                             setState(() {
                               if (checked == true) {
                                 _selectedRabbiIds.add(rabbi.id);
-                                _pathControllers[rabbi.id] =
-                                    TextEditingController();
+                                // בקר כבר קיים או נוצר הרגע באמצעות putIfAbsent
                               } else {
                                 _selectedRabbiIds.remove(rabbi.id);
                                 _pathControllers.remove(rabbi.id)?.dispose();
@@ -299,14 +346,20 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
                         ),
                         if (isSelected)
                           Padding(
-                            padding:
-                                const EdgeInsets.fromLTRB(16.0, 0, 56.0, 16.0),
+                            padding: const EdgeInsets.fromLTRB(
+                                16.0, 0, 16.0, 16.0), // שינוי padding
                             child: TextFormField(
                               controller: _pathControllers[rabbi.id],
-                              decoration: const InputDecoration(
+                              decoration: InputDecoration(
                                 labelText: 'הגבלת תיקיה (אופציונלי)',
                                 hintText: 'לדוגמה: תשפ״ד/שיעורים',
-                                border: OutlineInputBorder(),
+                                border: const OutlineInputBorder(),
+                                suffixIcon: IconButton(
+                                  // הוספת כפתור "עיון..."
+                                  icon: const Icon(Icons.folder_open),
+                                  onPressed: () => _pickSpecificPath(rabbi),
+                                  tooltip: 'בחר תיקיה מתוך תיקיית הרב',
+                                ),
                               ),
                               textAlign: TextAlign.start,
                             ),
@@ -332,10 +385,9 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
                   final permissionsToSet = <int, String?>{};
                   for (final rabbiId in _selectedRabbiIds) {
                     final path = _pathControllers[rabbiId]?.text.trim();
+                    // שמירה כ-null אם ריק
                     permissionsToSet[rabbiId] =
-                        (path != null && path.isNotEmpty)
-                            ? path.replaceAll(r'\', '/')
-                            : null;
+                        (path != null && path.isNotEmpty) ? path : null;
                   }
                   await ref.read(databaseProvider).setPermissionsForUser(
                         widget.user.id,
@@ -581,7 +633,9 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
           _mountPath = connectedDevice.mountPath;
         });
       }
-    } catch (e) {}
+    } catch (e) {
+      // ייתכן וההתקן נותק או לא זוהה
+    }
   }
 
   String _generateRandomSerial() {
