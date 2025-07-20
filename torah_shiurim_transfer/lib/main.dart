@@ -11,16 +11,25 @@ void main() async {
 
   final container = ProviderContainer();
 
-  WindowActions.onWindowCloseCallback =
-      () => container.read(authStateProvider.notifier).logout();
+  // אתחול שירות הלוג לפני כל שימוש בו
+  final logService = container.read(logServiceProvider);
+  await logService.init();
+
+  WindowActions.onWindowCloseCallback = () {
+    logService.logUserActivity('Application window closed, logging out.');
+    container.read(authStateProvider.notifier).logout();
+  };
 
   await TrayInitializer(container).init();
 
   WindowActions.router = container.read(routerProvider);
 
+  // וודא שהגדרות האפליקציה נטענות מוקדם
   await container.read(databaseProvider).getAppSettings();
+  logService.logInfo('App settings loaded.');
 
   await container.read(authStateProvider.notifier).loginAsAdmin();
+  logService.logInfo('Initial admin login attempt completed.');
 
   runApp(
     UncontrolledProviderScope(
@@ -36,6 +45,8 @@ class MyApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
+    // NEW: הסרת ההתייחסות ל-logService מתוך מתודת ה-build של MyApp
+    // final logService = ref.watch(logServiceProvider);
 
     return MaterialApp.router(
       title: 'העברת שיעורי תורה',

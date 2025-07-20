@@ -6,34 +6,58 @@ import 'package:material_hebrew_date_picker/material_hebrew_date_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:torah_shiurim_transfer/core/database/database.dart';
 import 'package:torah_shiurim_transfer/core/providers/providers.dart';
+import 'package:torah_shiurim_transfer/services/log_service.dart'; // NEW
 
 final _sourceFilesProvider =
     FutureProvider.autoDispose<List<File>>((ref) async {
   final authState = ref.watch(authStateProvider);
   final fileService = ref.watch(fileServiceProvider);
+  final logService = ref.read(logServiceProvider); // NEW: Access log service
 
-  ref.watch(_lastCopiedFileNameProvider);
+  ref.watch(
+      _lastCopiedFileNameProvider); // Triggers re-fetch when last copied file changes
 
   return authState.maybeMap(
     user: (userState) async {
       final sourcePath =
           p.join(userState.mountPath, userState.device.sourcePath);
-      return fileService.getAudioFiles(sourcePath);
+      logService.logInfo(
+          'Fetching audio files from device source path: $sourcePath for user: ${userState.user.name}'); // NEW
+      try {
+        // NEW: Add try-catch for file operations
+        return await fileService.getAudioFiles(sourcePath);
+      } catch (e, st) {
+        // NEW: Catch and log error
+        logService.logError(
+            'Failed to get audio files from $sourcePath', e, st); // NEW
+        return []; // NEW: Return empty list on error
+      } // NEW
     },
-    orElse: () => [],
+    orElse: () {
+      logService.logInfo(
+          'No user logged in, returning empty list for source files.'); // NEW
+      return [];
+    },
   );
 });
 
-// שינוי כאן: הפרויידר כבר מחזיר List<UserPermissionInfo> כפי שהגדרנו ב-database.dart
-// לכן אין צורך בשינוי בפרויידר עצמו, רק נוודא שה-UserTransferScreen משתמש בטיפוס הנכון.
 final _allowedRabbisProvider =
     StreamProvider.autoDispose<List<UserPermissionInfo>>((ref) {
   final authState = ref.watch(authStateProvider);
   final db = ref.watch(databaseProvider);
+  final logService = ref.read(logServiceProvider); // NEW: Access log service
 
   return authState.maybeMap(
-    user: (userState) => db.watchPermissionsForUser(userState.user.id),
-    orElse: () => Stream.value([]),
+    user: (userState) {
+      logService.logInfo(
+          'Watching permissions for user: ${userState.user.name}'); // NEW
+      return db.watchPermissionsForUser(userState.user.id);
+    },
+    orElse: () {
+      logService.logInfo(
+          'No user logged in, returning empty stream for allowed rabbis.'); // NEW
+      return Stream.value([]);
+    },
   );
 });
 
@@ -48,12 +72,12 @@ class UserTransferScreen extends ConsumerStatefulWidget {
 
 class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
   File? _selectedFile;
-  UserPermissionInfo?
-      _selectedPermission; // שינוי: Rabbi? ל-UserPermissionInfo?
+  UserPermissionInfo? _selectedPermission;
   JewishDate _selectedDate = JewishDate();
   final _topicController = TextEditingController();
   bool _isCopying = false;
   AppSetting? _appSettings;
+  late final LogService _logService; // NEW: Declare LogService
 
   final List<List<String>> _hebrewKeys = const [
     ['-', '0', '9', '8', '7', '6', '5', '4', '3', '2', '1'],
@@ -65,16 +89,28 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
   @override
   void initState() {
     super.initState();
+    _logService = ref.read(logServiceProvider); // NEW: Initialize LogService
     _loadSettings();
+    _logService.logInfo('User Transfer screen initialized.'); // NEW
   }
 
   Future<void> _loadSettings() async {
-    final settings = await ref.read(databaseProvider).getAppSettings();
-    if (mounted) {
-      setState(() {
-        _appSettings = settings;
-      });
-    }
+    _logService.logInfo('Loading app settings for user panel.'); // NEW
+    try {
+      // NEW: Add try-catch for database operation
+      final settings = await ref.read(databaseProvider).getAppSettings();
+      if (mounted) {
+        setState(() {
+          _appSettings = settings;
+        });
+        _logService
+            .logInfo('App settings loaded successfully for user panel.'); // NEW
+      }
+    } catch (e, st) {
+      // NEW: Catch and log error
+      _logService.logError(
+          'Failed to load app settings for user panel', e, st); // NEW
+    } // NEW
   }
 
   @override
@@ -84,16 +120,17 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
   }
 
   void _resetForm() {
+    _logService.logInfo('Resetting transfer form.'); // NEW
     setState(() {
       _selectedFile = null;
-      _selectedPermission = null; // שינוי
+      _selectedPermission = null;
       _topicController.clear();
       _selectedDate = JewishDate();
     });
   }
 
   String _getNewFileName() {
-    if (_selectedPermission == null || _selectedFile == null) // שינוי
+    if (_selectedPermission == null || _selectedFile == null)
       return 'שם קובץ...';
     final formatter = HebrewDateFormatter()
       ..hebrewFormat = true
@@ -104,13 +141,18 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
     final extension = (_appSettings?.convertToMp3 ?? false)
         ? '.mp3'
         : p.extension(_selectedFile!.path);
-    return '$dateStr - ${_selectedPermission!.rabbi.name}${sanitizedTopic.isNotEmpty ? ' - $sanitizedTopic' : ''}$extension'; // שינוי
+    final fileName =
+        '$dateStr - ${_selectedPermission!.rabbi.name}${sanitizedTopic.isNotEmpty ? ' - $sanitizedTopic' : ''}$extension'; // NEW
+    _logService.logInfo('Generated new file name: $fileName'); // NEW
+    return fileName; // NEW
   }
 
   Future<void> _copyFile() async {
     if (_selectedFile == null ||
-        _selectedPermission == null || // שינוי
+        _selectedPermission == null ||
         _appSettings == null) {
+      _logService.logWarning(
+          'Attempted to copy file with missing selections (file, permission, or settings).'); // NEW
       return;
     }
 
@@ -120,12 +162,14 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     final authState = ref.read(authStateProvider);
 
+    _logService.logUserActivity(
+        'User initiating file transfer for: ${_selectedFile!.path}'); // NEW
+
     try {
       final newFileName = _getNewFileName();
-      final baseDirectory = _selectedPermission!.rabbi.targetPath; // שינוי
-      final subDirectory = _selectedPermission!.specificPath; // שינוי
+      final baseDirectory = _selectedPermission!.rabbi.targetPath;
+      final subDirectory = _selectedPermission!.specificPath;
 
-      // בניית נתיב היעד המלא: בסיס הרב + תיקיית המשנה (אם קיימת)
       final destinationDirectory =
           (subDirectory != null && subDirectory.isNotEmpty)
               ? p.join(baseDirectory, subDirectory)
@@ -134,6 +178,8 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
       final destinationPath = p.join(destinationDirectory, newFileName);
       final fileService = ref.read(fileServiceProvider);
 
+      _logService.logInfo(
+          'Copying/converting file from ${_selectedFile!.path} to $destinationPath (Convert to MP3: ${_appSettings!.convertToMp3})'); // NEW
       if (_appSettings!.convertToMp3) {
         await fileService.convertAndCopyFile(
           sourceFile: _selectedFile!,
@@ -149,6 +195,7 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
         );
       }
 
+      // Log transfer to database
       await authState.maybeWhen(
         user: (user, device, mountPath) async {
           await ref.read(databaseProvider).logTransfer(
@@ -159,13 +206,24 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
                   timestamp: DateTime.now(),
                 ),
               );
+          _logService.logUserActivity(
+              'Transfer logged for user ${user.name}: Source ${_selectedFile!.path}, Destination: $destinationPath'); // NEW
         },
-        orElse: () {},
+        orElse: () {
+          _logService.logInfo(
+              'Transfer completed but no user active to log to DB. Source: ${_selectedFile!.path}, Destination: $destinationPath'); // NEW
+        },
       );
 
       ref.read(_lastCopiedFileNameProvider.notifier).state = newFileName;
+      _logService.logInfo('File transfer successful: $newFileName'); // NEW
       _resetForm();
-    } catch (e) {
+    } catch (e, st) {
+      // NEW: Catch and log errors
+      _logService.logError(
+          'Error during file transfer from ${_selectedFile!.path}',
+          e,
+          st); // NEW
       scaffoldMessenger.showSnackBar(
         SnackBar(
           content: Text('שגיאה בהעתקת הקובץ: $e'),
@@ -180,6 +238,8 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
   }
 
   Future<void> _pickHebrewDate() async {
+    _logService.logUserActivity(
+        'User opened Hebrew date picker. Current date: ${_selectedDate.toString()}'); // NEW
     final initial = _selectedDate.getGregorianCalendar();
     final firstHebrew = (JewishDate()
           ..setJewishDate(5780, JewishDate.TISHREI, 1))
@@ -204,6 +264,11 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
       final newJd = JewishDate();
       newJd.setDate(picked);
       setState(() => _selectedDate = newJd);
+      _logService
+          .logInfo('User selected Hebrew date: ${newJd.toString()}'); // NEW
+    } else {
+      // NEW: Log cancellation
+      _logService.logInfo('Hebrew date picker cancelled.'); // NEW
     }
   }
 
@@ -235,6 +300,8 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
                         _topicController.text += key;
                         _topicController.selection = TextSelection.fromPosition(
                             TextPosition(offset: _topicController.text.length));
+                        _logService.logInfo(
+                            'Hebrew keyboard input: "$key", current topic: "${_topicController.text}"'); // NEW
                       },
                       child: Text(key, style: keyTextStyle),
                     ),
@@ -263,6 +330,8 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
                             text.substring(0, text.length - 1);
                         _topicController.selection = TextSelection.fromPosition(
                             TextPosition(offset: _topicController.text.length));
+                        _logService.logInfo(
+                            'Hebrew keyboard backspace, current topic: "${_topicController.text}"'); // NEW
                       }
                     },
                     child: const Icon(Icons.backspace_outlined, size: 22),
@@ -277,6 +346,8 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
                     style: buttonStyle,
                     onPressed: () {
                       _topicController.text += ' ';
+                      _logService.logInfo(
+                          'Hebrew keyboard space, current topic: "${_topicController.text}"'); // NEW
                     },
                     icon: const Icon(Icons.space_bar),
                     label: const Text('רווח', style: TextStyle(fontSize: 16)),
@@ -307,10 +378,14 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
     final buttonTextColor = theme.colorScheme.onSecondaryContainer;
 
     if (_appSettings == null) {
+      _logService.logInfo(
+          'User Transfer screen waiting for app settings to load.'); // NEW
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
       );
     }
+    _logService.logInfo(
+        'User Transfer screen built for user: $userName, device: $deviceSerial'); // NEW
 
     return Scaffold(
       appBar: AppBar(
@@ -364,20 +439,27 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
                                   tileColor: isSelected
                                       ? theme.colorScheme.primaryContainer
                                       : null,
-                                  onTap: () => setState(() {
-                                    _selectedFile = file;
-                                    ref
-                                        .read(_lastCopiedFileNameProvider
-                                            .notifier)
-                                        .state = null;
-                                  }),
+                                  onTap: () {
+                                    setState(() {
+                                      _selectedFile = file;
+                                      ref
+                                          .read(_lastCopiedFileNameProvider
+                                              .notifier)
+                                          .state = null;
+                                    });
+                                    _logService.logUserActivity(
+                                        'User selected file: ${file.path}'); // NEW
+                                  },
                                 );
                               },
                             ),
                       loading: () =>
                           const Center(child: CircularProgressIndicator()),
-                      error: (err, stack) =>
-                          Center(child: Text('שגיאה בטעינת קבצים: $err')),
+                      error: (err, stack) {
+                        _logService.logError(
+                            'Error loading source files', err, stack); // NEW
+                        return Center(child: Text('שגיאה בטעינת קבצים: $err'));
+                      },
                     ),
                   ),
                 ],
@@ -409,7 +491,7 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
 
   Widget _buildFormContent(
       ThemeData theme,
-      AsyncValue<List<UserPermissionInfo>> allowedRabbisAsync, // שינוי
+      AsyncValue<List<UserPermissionInfo>> allowedRabbisAsync,
       Color buttonColor,
       Color buttonTextColor,
       String? lastCopiedFileName) {
@@ -472,20 +554,26 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
                 allowedRabbisAsync.when(
                   data: (permissions) =>
                       DropdownButtonFormField<UserPermissionInfo>(
-                    // שינוי
-                    value: _selectedPermission, // שינוי
+                    value: _selectedPermission,
                     items: permissions
                         .map((p) => DropdownMenuItem(
-                            value: p, child: Text(p.rabbi.name))) // שינוי
+                            value: p, child: Text(p.rabbi.name)))
                         .toList(),
-                    onChanged: (val) =>
-                        setState(() => _selectedPermission = val), // שינוי
+                    onChanged: (val) {
+                      setState(() => _selectedPermission = val);
+                      _logService.logUserActivity(
+                          'User selected rabbi: ${val?.rabbi.name}'); // NEW
+                    },
                     decoration: const InputDecoration(
                         labelText: 'בחר רב', border: OutlineInputBorder()),
                   ),
                   loading: () =>
                       const Center(child: CircularProgressIndicator()),
-                  error: (err, stack) => Text('שגיאה: $err'),
+                  error: (err, stack) {
+                    _logService.logError(
+                        'Error loading allowed rabbis', err, stack); // NEW
+                    return Text('שגיאה: $err');
+                  },
                 ),
                 const SizedBox(height: 16),
                 TextField(
@@ -541,7 +629,7 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
                 color: theme.colorScheme.onPrimary,
                 fontWeight: FontWeight.bold),
           ),
-          onPressed: _selectedPermission == null ? null : _copyFile, // שינוי
+          onPressed: _selectedPermission == null ? null : _copyFile,
         ),
       ],
     );

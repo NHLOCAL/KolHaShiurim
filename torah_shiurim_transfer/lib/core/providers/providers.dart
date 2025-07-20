@@ -3,12 +3,22 @@ import 'package:torah_shiurim_transfer/core/database/database.dart';
 import 'package:torah_shiurim_transfer/models/app_user.dart';
 import 'package:torah_shiurim_transfer/services/device_service.dart';
 import 'package:torah_shiurim_transfer/services/file_service.dart';
+import 'package:torah_shiurim_transfer/services/log_service.dart';
 import 'package:drift/drift.dart';
 import 'package:torah_shiurim_transfer/tray/window_actions.dart';
 
 final databaseProvider = Provider<AppDatabase>((ref) => AppDatabase());
-final deviceServiceProvider = Provider<DeviceService>((ref) => DeviceService());
-final fileServiceProvider = Provider<FileService>((ref) => FileService());
+final logServiceProvider = Provider<LogService>((ref) => LogService());
+
+// הזרקת LogService ל-DeviceService ו-FileService
+final deviceServiceProvider = Provider<DeviceService>((ref) {
+  final logService = ref.watch(logServiceProvider);
+  return DeviceService(logService);
+});
+final fileServiceProvider = Provider<FileService>((ref) {
+  final logService = ref.watch(logServiceProvider);
+  return FileService(logService);
+});
 
 final connectedDevicesProvider = StreamProvider((ref) {
   final controller = ref.watch(deviceServiceProvider).watchConnectedDevices();
@@ -23,73 +33,111 @@ final authStateProvider =
 
 class AuthStateNotifier extends StateNotifier<AppUserState> {
   final Ref _ref;
+  late final LogService _logService;
+
   AuthStateNotifier(this._ref) : super(const AppUserState.loggedOut()) {
+    _logService = _ref.read(logServiceProvider);
     _listenForDevices();
+    _logService.logInfo(
+        'Application started, listening for authentication state changes.');
   }
 
   void _listenForDevices() {
     _ref.listen(connectedDevicesProvider, (_, asyncValue) {
-      asyncValue.whenData((devices) async {
-        state.whenOrNull(user: (user, device, mountPath) {
-          final isConnected =
-              devices.any((d) => d.serialNumber == device.serialNumber);
-          if (!isConnected) {
-            logout();
+      // NEW: Using maybeWhen to handle different states of AsyncValue
+      asyncValue.maybeWhen(
+        data: (devices) async {
+          _logService.logInfo(
+              'Connected devices updated: ${devices.map((d) => d.serialNumber).join(', ')}');
+
+          state.whenOrNull(user: (user, device, mountPath) {
+            final isConnected =
+                devices.any((d) => d.serialNumber == device.serialNumber);
+            if (!isConnected) {
+              _logService.logUserActivity(
+                  'User ${user.name} (device ${device.serialNumber}) disconnected. Logging out.');
+              logout();
+            }
+          });
+
+          if (state.isUser) return;
+          if (state.isAdmin) return;
+
+          for (final connectedDevice in devices) {
+            final dbDevice = await _ref
+                .read(databaseProvider)
+                .getDeviceBySerial(connectedDevice.serialNumber);
+
+            if (dbDevice != null) {
+              final user = await (_ref
+                      .read(databaseProvider)
+                      .select(_ref.read(databaseProvider).users)
+                    ..where((u) => u.id.equals(dbDevice.userId)))
+                  .getSingle();
+
+              state = AppUserState.user(
+                user: user,
+                device: dbDevice,
+                mountPath: connectedDevice.mountPath,
+              );
+              _logService.logUserActivity(
+                  'User ${user.name} logged in automatically via device ${dbDevice.serialNumber}.');
+
+              WindowActions.showUserPanel();
+              return;
+            }
           }
-        });
-
-        if (state.isUser) return;
-        if (state.isAdmin) return;
-
-        for (final connectedDevice in devices) {
-          final dbDevice = await _ref
-              .read(databaseProvider)
-              .getDeviceBySerial(connectedDevice.serialNumber);
-
-          if (dbDevice != null) {
-            final user = await (_ref
-                    .read(databaseProvider)
-                    .select(_ref.read(databaseProvider).users)
-                  ..where((u) => u.id.equals(dbDevice.userId)))
-                .getSingle();
-
-            state = AppUserState.user(
-              user: user,
-              device: dbDevice,
-              mountPath: connectedDevice.mountPath,
-            );
-
-            WindowActions.showUserPanel();
-            return;
-          }
-        }
-      });
+          _logService.logInfo('No user device found, staying logged out.');
+        },
+        error: (error, stackTrace) {
+          // NEW: This correctly handles the error state
+          _logService.logError(
+              'Error watching connected devices', error, stackTrace);
+        },
+        orElse: () {
+          // NEW: Handle other states (like loading) if needed, otherwise do nothing.
+          // For a StreamProvider, this could capture the initial loading state or subsequent loading states.
+          _logService.logInfo(
+              'Connected devices stream is in a non-data/non-error state (e.g., loading).');
+        },
+      );
     });
   }
 
   Future<void> loginAsAdmin() async {
-    var admin = await (_ref
-            .read(databaseProvider)
-            .select(_ref.read(databaseProvider).users)
-          ..where((u) => u.isAdmin.equals(true)))
-        .getSingleOrNull();
-
-    if (admin == null) {
-      final adminId = await _ref.read(databaseProvider).insertUser(
-            const UsersCompanion(name: Value('Admin'), isAdmin: Value(true)),
-          );
-      admin = await (_ref
+    _logService.logUserActivity('Attempting to log in as Admin.');
+    try {
+      var admin = await (_ref
               .read(databaseProvider)
               .select(_ref.read(databaseProvider).users)
-            ..where((u) => u.id.equals(adminId)))
-          .getSingle();
-    }
-    state = AppUserState.admin(admin);
+            ..where((u) => u.isAdmin.equals(true)))
+          .getSingleOrNull();
 
-    WindowActions.showAdminPanel();
+      if (admin == null) {
+        _logService.logInfo('No admin user found, creating default admin.');
+        final adminId = await _ref.read(databaseProvider).insertUser(
+              const UsersCompanion(name: Value('Admin'), isAdmin: Value(true)),
+            );
+        admin = await (_ref
+                .read(databaseProvider)
+                .select(_ref.read(databaseProvider).users)
+              ..where((u) => u.id.equals(adminId)))
+            .getSingle();
+        _logService.logUserActivity(
+            'Default Admin user created with ID: ${admin.id}.');
+      }
+      state = AppUserState.admin(admin);
+      _logService.logUserActivity('Admin user logged in.');
+
+      WindowActions.showAdminPanel();
+    } catch (e, st) {
+      _logService.logError('Failed to login as Admin.', e, st);
+    }
   }
 
   void logout() {
+    _logService.logUserActivity(
+        'User logged out manually or due to device disconnection.');
     state = const AppUserState.loggedOut();
 
     WindowActions.hide(resizeToAdmin: false);

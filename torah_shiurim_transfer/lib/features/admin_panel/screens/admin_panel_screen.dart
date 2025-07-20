@@ -8,12 +8,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:torah_shiurim_transfer/core/database/database.dart';
 import 'package:torah_shiurim_transfer/core/providers/providers.dart';
 import 'package:torah_shiurim_transfer/models/device_info.dart';
+import 'package:torah_shiurim_transfer/services/log_service.dart'; // NEW
 
 class AdminPanelScreen extends ConsumerWidget {
   const AdminPanelScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // NEW: גישה ל-LogService עבור אירועי פאנל הניהול הכלליים
+    final logService = ref.read(logServiceProvider);
+    logService.logInfo('Admin Panel screen opened.'); // NEW
+
     return DefaultTabController(
       length: 4,
       child: Scaffold(
@@ -23,7 +28,11 @@ class AdminPanelScreen extends ConsumerWidget {
             IconButton(
               icon: const Icon(Icons.logout),
               tooltip: 'התנתקות',
-              onPressed: () => ref.read(authStateProvider.notifier).logout(),
+              onPressed: () {
+                logService
+                    .logUserActivity('Admin clicked logout button.'); // NEW
+                ref.read(authStateProvider.notifier).logout();
+              },
             ),
           ],
           bottom: const TabBar(
@@ -84,11 +93,16 @@ class _UsersManagementTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final usersAsync = ref.watch(allUsersProvider);
+    final logService = ref.read(logServiceProvider); // NEW: Access log service
+
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
         icon: const Icon(Icons.add),
         label: const Text('הוסף משתמש'),
-        onPressed: () => _showUserDialog(context, ref),
+        onPressed: () {
+          logService.logUserActivity('Admin opened "Add User" dialog.'); // NEW
+          _showUserDialog(context, ref);
+        },
       ),
       body: usersAsync.when(
         data: (users) => ListView.builder(
@@ -96,7 +110,7 @@ class _UsersManagementTab extends ConsumerWidget {
           itemCount: users.length,
           itemBuilder: (context, index) {
             final user = users[index];
-            // בניית מחרוזת ה-subtitle
+
             String subtitleText = user.isAdmin ? 'מנהל' : 'משתמש רגיל';
             if (user.additionalInfo != null &&
                 user.additionalInfo!.isNotEmpty) {
@@ -112,34 +126,62 @@ class _UsersManagementTab extends ConsumerWidget {
                     style: const TextStyle(fontWeight: FontWeight.bold)),
                 subtitle: Text(subtitleText),
                 isThreeLine: user.additionalInfo != null &&
-                    user.additionalInfo!.isNotEmpty, // חדש: מאפשר 3 שורות
+                    user.additionalInfo!.isNotEmpty,
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (!user.isAdmin)
                       TextButton(
                         child: const Text('הרשאות'),
-                        onPressed: () =>
-                            _showPermissionsDialog(context, ref, user),
+                        onPressed: () {
+                          logService.logUserActivity(
+                              'Admin opened permissions dialog for user: ${user.name}'); // NEW
+                          _showPermissionsDialog(context, ref, user);
+                        },
                       ),
                     IconButton(
                       icon: const Icon(Icons.delete_outline),
                       color: Theme.of(context).colorScheme.error,
                       tooltip: 'מחק משתמש',
                       onPressed: () => _showDeleteConfirmation(
-                          context, 'משתמש', user.name, () {
-                        ref.read(databaseProvider).deleteUser(user.id);
+                          context, 'משתמש', user.name, () async {
+                        // NEW: Async to allow logging
+                        try {
+                          // NEW: Add try-catch for database operation
+                          await ref.read(databaseProvider).deleteUser(user.id);
+                          logService.logUserActivity(
+                              'Admin deleted user: ${user.name} (ID: ${user.id})'); // NEW
+                        } catch (e, st) {
+                          // NEW: Catch and log error
+                          logService.logError(
+                              'Failed to delete user: ${user.name}',
+                              e,
+                              st); // NEW
+                          ScaffoldMessenger.of(context).showSnackBar(
+                              // NEW: Show snackbar on error
+                              SnackBar(
+                                  content:
+                                      Text('שגיאה במחיקת משתמש: $e'))); // NEW
+                        } // NEW
                       }),
                     ),
                   ],
                 ),
-                onTap: () => _showUserDialog(context, ref, user: user),
+                onTap: () {
+                  logService.logUserActivity(
+                      'Admin opened "Edit User" dialog for user: ${user.name}'); // NEW
+                  _showUserDialog(context, ref, user: user);
+                },
               ),
             );
           },
         ),
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, st) => Center(child: Text('Error: $e')),
+        error: (e, st) {
+          logService.logError(
+              'Error loading users data', e, st); // NEW: Log errors
+          return Center(child: Text('Error: $e'));
+        },
       ),
     );
   }
@@ -154,10 +196,11 @@ class _UsersManagementTab extends ConsumerWidget {
   void _showUserDialog(BuildContext context, WidgetRef ref, {User? user}) {
     final nameController = TextEditingController(text: user?.name);
     bool isAdmin = user?.isAdmin ?? false;
-    // בקר עבור מידע נוסף
+
     final additionalInfoController =
         TextEditingController(text: user?.additionalInfo);
     final formKey = GlobalKey<FormState>();
+    final logService = ref.read(logServiceProvider); // NEW: Access log service
 
     showDialog(
       context: context,
@@ -179,16 +222,14 @@ class _UsersManagementTab extends ConsumerWidget {
                       textAlign: TextAlign.start,
                     ),
                     const SizedBox(height: 16),
-                    // שינוי: שדה למידע נוסף עם גובה התחלתי של 3 שורות
                     TextFormField(
                       controller: additionalInfoController,
                       decoration: const InputDecoration(
                           labelText: 'פרטים נוספים (טלפון, שיעור, ועד וכו\')',
                           border: OutlineInputBorder()),
                       textAlign: TextAlign.start,
-                      minLines: 3, // שונה ל-3 - הגובה ההתחלתי
-                      maxLines:
-                          5, // ניתן להרחיב עד 5 שורות, או null לגובה בלתי מוגבל
+                      minLines: 3,
+                      maxLines: 5,
                     ),
                     const SizedBox(height: 16),
                     CheckboxListTile(
@@ -217,20 +258,39 @@ class _UsersManagementTab extends ConsumerWidget {
                       final companion = UsersCompanion(
                         name: drift.Value(nameController.text),
                         isAdmin: drift.Value(isAdmin),
-                        // שמירת המידע הנוסף
                         additionalInfo: drift.Value(
                             additionalInfoController.text.trim().isEmpty
                                 ? null
                                 : additionalInfoController.text.trim()),
                       );
-                      if (user == null) {
-                        await ref.read(databaseProvider).insertUser(companion);
-                      } else {
-                        await ref.read(databaseProvider).updateUser(
-                              companion.copyWith(id: drift.Value(user.id)),
-                            );
-                      }
-                      Navigator.of(context).pop();
+                      try {
+                        // NEW: Add try-catch for database operation
+                        if (user == null) {
+                          final newUserId = await ref
+                              .read(databaseProvider)
+                              .insertUser(companion);
+                          logService.logUserActivity(
+                              'Admin added new user: ${nameController.text} (ID: $newUserId, isAdmin: $isAdmin)'); // NEW
+                        } else {
+                          await ref.read(databaseProvider).updateUser(
+                                companion.copyWith(id: drift.Value(user.id)),
+                              );
+                          logService.logUserActivity(
+                              'Admin updated user: ${user.name} (ID: ${user.id}) to ${nameController.text}, isAdmin: $isAdmin'); // NEW
+                        }
+                        Navigator.of(context).pop();
+                      } catch (e, st) {
+                        // NEW: Catch and log error
+                        logService.logError(
+                            'Failed to save user: ${nameController.text}',
+                            e,
+                            st); // NEW
+                        ScaffoldMessenger.of(context).showSnackBar(
+                            // NEW: Show snackbar on error
+                            SnackBar(
+                                content:
+                                    Text('שגיאה בשמירת משתמש: $e'))); // NEW
+                      } // NEW
                     }
                   },
                   child: const Text('שמירה'),
@@ -256,10 +316,12 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
   Set<int> _selectedRabbiIds = {};
   Map<int, TextEditingController> _pathControllers = {};
   bool _isLoading = true;
+  late final LogService _logService; // NEW: Declare LogService
 
   @override
   void initState() {
     super.initState();
+    _logService = ref.read(logServiceProvider); // NEW: Initialize LogService
     _loadInitialPermissions();
   }
 
@@ -272,28 +334,48 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
   }
 
   Future<void> _loadInitialPermissions() async {
-    // נשתמש ב-getPermissionsForUser כדי לקבל את הנתיבים הספציפיים הקיימים
-    final initialPermissions =
-        await ref.read(databaseProvider).getPermissionsForUser(widget.user.id);
-    if (mounted) {
-      final newSelectedIds = <int>{};
-      final newControllers = <int, TextEditingController>{};
-      for (final p in initialPermissions) {
-        newSelectedIds.add(p.rabbiId);
-        // ודא שהבקר נוצר רק אם יש נתיב ספציפי או אם הוספת אותו לרשימת הנבחרים
-        newControllers[p.rabbiId] = TextEditingController(text: p.specificPath);
+    _logService.logInfo(
+        'Loading initial permissions for user: ${widget.user.name}'); // NEW
+    try {
+      // NEW: Add try-catch for database operation
+      final initialPermissions = await ref
+          .read(databaseProvider)
+          .getPermissionsForUser(widget.user.id);
+      if (mounted) {
+        final newSelectedIds = <int>{};
+        final newControllers = <int, TextEditingController>{};
+        for (final p in initialPermissions) {
+          newSelectedIds.add(p.rabbiId);
+
+          newControllers[p.rabbiId] =
+              TextEditingController(text: p.specificPath);
+        }
+        setState(() {
+          _selectedRabbiIds = newSelectedIds;
+          _pathControllers = newControllers;
+          _isLoading = false;
+        });
+        _logService.logInfo(
+            'Initial permissions loaded successfully for user: ${widget.user.name}'); // NEW
       }
-      setState(() {
-        _selectedRabbiIds = newSelectedIds;
-        _pathControllers = newControllers;
-        _isLoading = false;
-      });
+    } catch (e, st) {
+      // NEW: Catch and log error
+      _logService.logError(
+          'Failed to load initial permissions for user: ${widget.user.name}',
+          e,
+          st); // NEW
+      if (mounted) {
+        // NEW: Show snackbar on error
+        ScaffoldMessenger.of(context).showSnackBar(// NEW
+            SnackBar(content: Text('שגיאה בטעינת הרשאות: $e'))); // NEW
+        setState(() => _isLoading = false); // NEW
+      } // NEW
     }
   }
 
-  // פונקציה לבחירת תיקיה באמצעות דיאלוג מערכת
   Future<void> _pickSpecificPath(Rabbi rabbi) async {
-    // נקודת התחלה לדיאלוג - תיקיית היעד הראשית של הרב
+    _logService.logUserActivity(
+        'Admin picking specific path for rabbi: ${rabbi.name}'); // NEW
     final initialDirectory = rabbi.targetPath;
 
     String? selectedDirectory = await FilePicker.platform.getDirectoryPath(
@@ -303,9 +385,10 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
     );
 
     if (selectedDirectory != null) {
-      // ודא שהנתיב הנבחר נמצא בתוך תיקיית היעד הראשית של הרב
       if (!selectedDirectory.startsWith(initialDirectory)) {
         if (mounted) {
+          _logService.logWarning(
+              'Selected directory ($selectedDirectory) is not within rabbi\'s base path ($initialDirectory).'); // NEW
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
                 content: Text('יש לבחור תיקיה בתוך תיקיית הרב המוגדרת.')),
@@ -314,11 +397,9 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
         return;
       }
 
-      // חישוב הנתיב היחסי
       String relativePath =
           selectedDirectory.substring(initialDirectory.length);
 
-      // הסרת סלאשים מובילים/סופיים מיותרים והחלפת \ ב /
       relativePath = relativePath.replaceAll(r'\', '/');
       if (relativePath.startsWith('/')) {
         relativePath = relativePath.substring(1);
@@ -328,9 +409,14 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
       }
 
       if (mounted) {
-        // עדכון הבקר של שדה הטקסט עם הנתיב היחסי
+        _logService.logInfo(
+            'Selected relative path for rabbi ${rabbi.name}: $relativePath'); // NEW
         _pathControllers[rabbi.id]?.text = relativePath;
       }
+    } else {
+      // NEW: Log cancellation
+      _logService
+          .logInfo('Directory picker for specific path cancelled.'); // NEW
     }
   }
 
@@ -348,7 +434,7 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
                   shrinkWrap: true,
                   children: rabbis.map<Widget>((rabbi) {
                     final isSelected = _selectedRabbiIds.contains(rabbi.id);
-                    // יצירת בקר אם עדיין לא קיים (למקרה של הוספה חדשה)
+
                     _pathControllers.putIfAbsent(
                         rabbi.id, () => TextEditingController());
                     return Column(
@@ -365,10 +451,13 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
                             setState(() {
                               if (checked == true) {
                                 _selectedRabbiIds.add(rabbi.id);
-                                // בקר כבר קיים או נוצר הרגע באמצעות putIfAbsent
+                                _logService.logInfo(
+                                    'Admin selected rabbi ${rabbi.name} for user ${widget.user.name}.'); // NEW
                               } else {
                                 _selectedRabbiIds.remove(rabbi.id);
                                 _pathControllers.remove(rabbi.id)?.dispose();
+                                _logService.logInfo(
+                                    'Admin deselected rabbi ${rabbi.name} for user ${widget.user.name}.'); // NEW
                               }
                             });
                           },
@@ -397,12 +486,22 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
                   }).toList(),
                 ),
                 loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, st) => Center(child: Text('שגיאה בטעינת רבנים: $e')),
+                error: (e, st) {
+                  _logService.logError(
+                      'Error loading rabbis for permissions dialog',
+                      e,
+                      st); // NEW
+                  return Center(child: Text('שגיאה בטעינת רבנים: $e'));
+                },
               ),
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () {
+            _logService.logUserActivity(
+                'Admin cancelled permissions dialog for user: ${widget.user.name}.'); // NEW
+            Navigator.of(context).pop();
+          },
           child: const Text('ביטול'),
         ),
         FilledButton(
@@ -413,16 +512,34 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
                   final permissionsToSet = <int, String?>{};
                   for (final rabbiId in _selectedRabbiIds) {
                     final path = _pathControllers[rabbiId]?.text.trim();
-                    // שמירה כ-null אם ריק
+
                     permissionsToSet[rabbiId] =
                         (path != null && path.isNotEmpty) ? path : null;
                   }
-                  await ref.read(databaseProvider).setPermissionsForUser(
-                        widget.user.id,
-                        permissionsToSet,
-                      );
-                  if (mounted) {
-                    Navigator.of(context).pop();
+                  try {
+                    // NEW: Add try-catch for database operation
+                    await ref.read(databaseProvider).setPermissionsForUser(
+                          widget.user.id,
+                          permissionsToSet,
+                        );
+                    _logService.logUserActivity(
+                        'Admin set permissions for user ${widget.user.name} (ID: ${widget.user.id}). Permissions: $permissionsToSet'); // NEW
+                    if (mounted) {
+                      Navigator.of(context).pop();
+                    }
+                  } catch (e, st) {
+                    // NEW: Catch and log error
+                    _logService.logError(
+                        'Failed to set permissions for user: ${widget.user.name}',
+                        e,
+                        st); // NEW
+                    if (mounted) {
+                      // NEW: Show snackbar on error
+                      ScaffoldMessenger.of(context).showSnackBar(// NEW
+                          SnackBar(
+                              content: Text('שגיאה בשמירת הרשאות: $e'))); // NEW
+                      setState(() => _isLoading = false); // NEW
+                    } // NEW
                   }
                 },
           child: const Text('שמור'),
@@ -438,11 +555,16 @@ class _RabbisManagementTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final rabbisAsync = ref.watch(allRabbisProvider);
+    final logService = ref.read(logServiceProvider); // NEW: Access log service
+
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
         icon: const Icon(Icons.add),
         label: const Text('הוסף רב'),
-        onPressed: () => _showRabbiDialog(context, ref),
+        onPressed: () {
+          logService.logUserActivity('Admin opened "Add Rabbi" dialog.'); // NEW
+          _showRabbiDialog(context, ref);
+        },
       ),
       body: rabbisAsync.when(
         data: (rabbis) => ListView.builder(
@@ -461,18 +583,42 @@ class _RabbisManagementTab extends ConsumerWidget {
                   icon: const Icon(Icons.delete_outline),
                   color: Theme.of(context).colorScheme.error,
                   tooltip: 'מחק רב',
-                  onPressed: () =>
-                      _showDeleteConfirmation(context, 'רב', rabbi.name, () {
-                    ref.read(databaseProvider).deleteRabbi(rabbi.id);
+                  onPressed: () => _showDeleteConfirmation(
+                      context, 'רב', rabbi.name, () async {
+                    // NEW: Async to allow logging
+                    try {
+                      // NEW: Add try-catch for database operation
+                      await ref.read(databaseProvider).deleteRabbi(rabbi.id);
+                      logService.logUserActivity(
+                          'Admin deleted rabbi: ${rabbi.name} (ID: ${rabbi.id})'); // NEW
+                    } catch (e, st) {
+                      // NEW: Catch and log error
+                      logService.logError(
+                          'Failed to delete rabbi: ${rabbi.name}',
+                          e,
+                          st); // NEW
+                      ScaffoldMessenger.of(context).showSnackBar(
+                          // NEW: Show snackbar on error
+                          SnackBar(
+                              content: Text('שגיאה במחיקת רב: $e'))); // NEW
+                    } // NEW
                   }),
                 ),
-                onTap: () => _showRabbiDialog(context, ref, rabbi: rabbi),
+                onTap: () {
+                  logService.logUserActivity(
+                      'Admin opened "Edit Rabbi" dialog for rabbi: ${rabbi.name}'); // NEW
+                  _showRabbiDialog(context, ref, rabbi: rabbi);
+                },
               ),
             );
           },
         ),
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, st) => Center(child: Text('Error: $e')),
+        error: (e, st) {
+          logService.logError(
+              'Error loading rabbis data', e, st); // NEW: Log errors
+          return Center(child: Text('Error: $e'));
+        },
       ),
     );
   }
@@ -481,6 +627,7 @@ class _RabbisManagementTab extends ConsumerWidget {
     final nameController = TextEditingController(text: rabbi?.name);
     final pathController = TextEditingController(text: rabbi?.targetPath);
     final formKey = GlobalKey<FormState>();
+    final logService = ref.read(logServiceProvider); // NEW: Access log service
 
     showDialog(
       context: context,
@@ -508,10 +655,18 @@ class _RabbisManagementTab extends ConsumerWidget {
                   prefixIcon: IconButton(
                     icon: const Icon(Icons.folder_open),
                     onPressed: () async {
+                      logService.logUserActivity(
+                          'Admin picking target path for rabbi.'); // NEW
                       String? selectedDirectory =
                           await FilePicker.platform.getDirectoryPath();
                       if (selectedDirectory != null) {
                         pathController.text = selectedDirectory;
+                        logService.logInfo(
+                            'Selected target path: $selectedDirectory'); // NEW
+                      } else {
+                        // NEW: Log cancellation
+                        logService
+                            .logInfo('Target path picker cancelled.'); // NEW
                       }
                     },
                   ),
@@ -523,7 +678,11 @@ class _RabbisManagementTab extends ConsumerWidget {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () {
+                logService
+                    .logUserActivity('Admin cancelled rabbi dialog.'); // NEW
+                Navigator.of(context).pop();
+              },
               child: const Text('ביטול')),
           FilledButton(
             onPressed: () async {
@@ -532,13 +691,30 @@ class _RabbisManagementTab extends ConsumerWidget {
                   name: drift.Value(nameController.text),
                   targetPath: drift.Value(pathController.text),
                 );
-                if (rabbi == null) {
-                  await ref.read(databaseProvider).insertRabbi(companion);
-                } else {
-                  await ref.read(databaseProvider).updateRabbi(
-                      companion.copyWith(id: drift.Value(rabbi.id)));
-                }
-                Navigator.of(context).pop();
+                try {
+                  // NEW: Add try-catch for database operation
+                  if (rabbi == null) {
+                    final newRabbiId =
+                        await ref.read(databaseProvider).insertRabbi(companion);
+                    logService.logUserActivity(
+                        'Admin added new rabbi: ${nameController.text} (ID: $newRabbiId, Path: ${pathController.text})'); // NEW
+                  } else {
+                    await ref.read(databaseProvider).updateRabbi(
+                        companion.copyWith(id: drift.Value(rabbi.id)));
+                    logService.logUserActivity(
+                        'Admin updated rabbi: ${rabbi.name} (ID: ${rabbi.id}) to ${nameController.text}, Path: ${pathController.text}'); // NEW
+                  }
+                  Navigator.of(context).pop();
+                } catch (e, st) {
+                  // NEW: Catch and log error
+                  logService.logError(
+                      'Failed to save rabbi: ${nameController.text}',
+                      e,
+                      st); // NEW
+                  ScaffoldMessenger.of(context).showSnackBar(
+                      // NEW: Show snackbar on error
+                      SnackBar(content: Text('שגיאה בשמירת רב: $e'))); // NEW
+                } // NEW
               }
             },
             child: const Text('שמירה'),
@@ -555,11 +731,17 @@ class _DevicesManagementTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final devicesAsync = ref.watch(allDevicesProvider);
+    final logService = ref.read(logServiceProvider); // NEW: Access log service
+
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
         icon: const Icon(Icons.add),
         label: const Text('הוסף התקן'),
-        onPressed: () => _showDeviceDialog(context, ref),
+        onPressed: () {
+          logService
+              .logUserActivity('Admin opened "Add Device" dialog.'); // NEW
+          _showDeviceDialog(context, ref);
+        },
       ),
       body: devicesAsync.when(
         data: (devices) => ListView.builder(
@@ -583,17 +765,41 @@ class _DevicesManagementTab extends ConsumerWidget {
                   color: Theme.of(context).colorScheme.error,
                   tooltip: 'מחק התקן',
                   onPressed: () => _showDeleteConfirmation(
-                      context, 'התקן', device.serialNumber, () {
-                    ref.read(databaseProvider).deleteDevice(device.id);
+                      context, 'התקן', device.serialNumber, () async {
+                    // NEW: Async to allow logging
+                    try {
+                      // NEW: Add try-catch for database operation
+                      await ref.read(databaseProvider).deleteDevice(device.id);
+                      logService.logUserActivity(
+                          'Admin deleted device: ${device.serialNumber} (ID: ${device.id})'); // NEW
+                    } catch (e, st) {
+                      // NEW: Catch and log error
+                      logService.logError(
+                          'Failed to delete device: ${device.serialNumber}',
+                          e,
+                          st); // NEW
+                      ScaffoldMessenger.of(context).showSnackBar(
+                          // NEW: Show snackbar on error
+                          SnackBar(
+                              content: Text('שגיאה במחיקת התקן: $e'))); // NEW
+                    } // NEW
                   }),
                 ),
-                onTap: () => _showDeviceDialog(context, ref, device: device),
+                onTap: () {
+                  logService.logUserActivity(
+                      'Admin opened "Edit Device" dialog for device: ${device.serialNumber}'); // NEW
+                  _showDeviceDialog(context, ref, device: device);
+                },
               ),
             );
           },
         ),
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, st) => Center(child: Text('Error: $e')),
+        error: (e, st) {
+          logService.logError(
+              'Error loading devices data', e, st); // NEW: Log errors
+          return Center(child: Text('Error: $e'));
+        },
       ),
     );
   }
@@ -626,10 +832,12 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
   bool _isLoading = false;
   bool _isChangingSerial = false;
   bool _isEditingSerial = false;
+  late final LogService _logService; // NEW: Declare LogService
 
   @override
   void initState() {
     super.initState();
+    _logService = ref.read(logServiceProvider); // NEW: Initialize LogService
     _serialController =
         TextEditingController(text: widget.device?.serialNumber);
     _sourcePathController =
@@ -651,6 +859,8 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
 
   Future<void> _findCurrentMountPath() async {
     if (widget.device == null) return;
+    _logService.logInfo(
+        'Attempting to find current mount path for device serial: ${widget.device!.serialNumber}'); // NEW
     try {
       final devices = await ref.read(connectedDevicesProvider.future);
       final connectedDevice = devices.firstWhere(
@@ -660,9 +870,13 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
         setState(() {
           _mountPath = connectedDevice.mountPath;
         });
+        _logService.logInfo(
+            'Found mount path for ${widget.device!.serialNumber}: $_mountPath'); // NEW
       }
     } catch (e) {
-      // ייתכן וההתקן נותק או לא זוהה
+      // Log as info, as it's not necessarily an error if device is not currently connected
+      _logService.logInfo(
+          'Mount path not found for device ${widget.device!.serialNumber}: $e'); // NEW
     }
   }
 
@@ -673,25 +887,34 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
         4, (_) => chars.codeUnitAt(random.nextInt(chars.length))));
     final part2 = String.fromCharCodes(Iterable.generate(
         4, (_) => chars.codeUnitAt(random.nextInt(chars.length))));
-    return '$part1-$part2';
+    final generatedSerial = '$part1-$part2'; // NEW
+    _logService
+        .logInfo('Generated random serial number: $generatedSerial'); // NEW
+    return generatedSerial; // NEW
   }
 
   Future<void> _locateDevice() async {
     setState(() => _isLoading = true);
+    _logService
+        .logUserActivity('Admin initiated device location process.'); // NEW
     try {
       final selectedPath = await FilePicker.platform.getDirectoryPath(
         lockParentWindow: true,
         dialogTitle: 'בחר תיקיית מקור מההתקן החיצוני',
       );
       if (selectedPath == null) {
+        _logService.logInfo('Device location cancelled by user.'); // NEW
         if (mounted) setState(() => _isLoading = false);
         return;
       }
+      _logService.logInfo('User selected path: $selectedPath'); // NEW
 
       final devices = await ref.read(connectedDevicesProvider.future);
       if (!mounted) return;
 
       if (devices.isEmpty) {
+        _logService.logWarning(
+            'No external drives found during device location.'); // NEW
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("לא נמצאו כוננים חיצוניים.")),
         );
@@ -703,11 +926,13 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
       try {
         drive = devices.firstWhere((d) => selectedPath.startsWith(d.mountPath));
       } catch (e) {
-        drive = null;
+        drive = null; // Device not found among connected ones
       }
 
       if (drive == null) {
         if (mounted) {
+          _logService.logWarning(
+              'Selected path ($selectedPath) is not on a recognized external drive.'); // NEW
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
                 content:
@@ -732,8 +957,13 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
           _isLoading = false;
           _isEditingSerial = false;
         });
+        _logService.logInfo(
+            'Device located successfully. MountPath: $_mountPath, Serial: ${_serialController.text}, SourcePath: $_sourcePathController.text'); // NEW
       }
-    } catch (e) {
+    } catch (e, st) {
+      // NEW: Catch and log error
+      _logService.logError(
+          'Error during device location process.', e, st); // NEW
       if (mounted) {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -744,9 +974,15 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
   }
 
   Future<void> _changeDeviceSerial() async {
-    if (!(_formKey.currentState?.validate() ?? false)) return;
+    if (!(_formKey.currentState?.validate() ?? false)) {
+      _logService.logWarning(
+          'Attempted to change device serial with invalid form data.'); // NEW
+      return;
+    }
 
     setState(() => _isChangingSerial = true);
+    _logService.logUserActivity(
+        'Admin attempting to change serial for device at $_mountPath to ${_serialController.text}.'); // NEW
     try {
       final resultMessage = await ref
           .read(deviceServiceProvider)
@@ -757,8 +993,15 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
               content: Text('הפעולה הצליחה: $resultMessage'),
               backgroundColor: Colors.green),
         );
+        _logService.logUserActivity(
+            'Successfully changed serial number for device: $_mountPath to ${_serialController.text}. Message: $resultMessage'); // NEW
       }
-    } catch (e) {
+    } catch (e, st) {
+      // NEW: Catch and log error
+      _logService.logError(
+          'Failed to change serial number for device at $_mountPath to ${_serialController.text}.',
+          e,
+          st); // NEW
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('שגיאה: $e'), backgroundColor: Colors.red),
@@ -782,15 +1025,23 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
 
       try {
         if (widget.device == null) {
-          await ref.read(databaseProvider).insertDevice(companion);
+          final newDeviceId =
+              await ref.read(databaseProvider).insertDevice(companion);
+          _logService.logUserActivity(
+              'Admin added new device: $serialNumber (ID: $newDeviceId), assigned to user ID: $_selectedUserId, SourcePath: ${_sourcePathController.text}'); // NEW
         } else {
           await ref.read(databaseProvider).updateDevice(
               companion.copyWith(id: drift.Value(widget.device!.id)));
+          _logService.logUserActivity(
+              'Admin updated device: ${widget.device!.serialNumber} (ID: ${widget.device!.id}) to $serialNumber, assigned to user ID: $_selectedUserId, SourcePath: ${_sourcePathController.text}'); // NEW
         }
         if (mounted) {
           Navigator.of(context).pop();
         }
-      } catch (e) {
+      } catch (e, st) {
+        // NEW: Catch and log error
+        _logService.logError(
+            'Failed to save device: $serialNumber', e, st); // NEW
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -800,6 +1051,10 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
           );
         }
       }
+    } else {
+      // NEW: Log invalid form submission
+      _logService.logWarning(
+          'Attempted to save device with invalid form data.'); // NEW
     }
   }
 
@@ -835,6 +1090,8 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
                     onPressed: () {
                       setState(() {
                         _isEditingSerial = !_isEditingSerial;
+                        _logService.logInfo(
+                            'Admin toggled serial number editing for device dialog. Now: $_isEditingSerial'); // NEW
                       });
                     },
                     tooltip:
@@ -901,11 +1158,21 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
                       .map((u) =>
                           DropdownMenuItem(value: u.id, child: Text(u.name)))
                       .toList(),
-                  onChanged: (id) => setState(() => _selectedUserId = id),
+                  onChanged: (id) {
+                    setState(() => _selectedUserId = id);
+                    final selectedUser = users.firstWhere(
+                        (u) => u.id == id); // NEW: Get selected user name
+                    _logService.logInfo(
+                        'Admin selected user ${selectedUser.name} (ID: $id) for device association.'); // NEW
+                  },
                   validator: (id) => id == null ? 'שדה חובה' : null,
                 ),
                 loading: () => const CircularProgressIndicator(),
-                error: (e, st) => Text("Error: $e"),
+                error: (e, st) {
+                  _logService.logError('Error loading users for device dialog',
+                      e, st); // NEW: Log errors
+                  return Text("Error: $e");
+                },
               ),
             ],
           ),
@@ -913,7 +1180,11 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
       ),
       actions: [
         TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () {
+              _logService
+                  .logUserActivity('Admin cancelled device dialog.'); // NEW
+              Navigator.of(context).pop();
+            },
             child: const Text('ביטול')),
         FilledButton(
           onPressed: _saveDevice,
@@ -930,6 +1201,7 @@ class _SettingsManagementTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settingsAsync = ref.watch(appSettingsProvider);
+    final logService = ref.read(logServiceProvider); // NEW: Access log service
 
     return Scaffold(
       body: settingsAsync.when(
@@ -953,11 +1225,28 @@ class _SettingsManagementTab extends ConsumerWidget {
                         subtitle: const Text(
                             'הפעלה תגרום להמרת כל קובץ שמע לפורמט MP3. דורש התקנת ffmpeg.'),
                         value: settings.convertToMp3,
-                        onChanged: (value) {
-                          ref.read(databaseProvider).updateAppSettings(
-                                AppSettingsCompanion(
-                                    convertToMp3: drift.Value(value)),
-                              );
+                        onChanged: (value) async {
+                          // NEW: Async to allow logging
+                          try {
+                            // NEW: Add try-catch for database operation
+                            await ref.read(databaseProvider).updateAppSettings(
+                                  AppSettingsCompanion(
+                                      convertToMp3: drift.Value(value)),
+                                );
+                            logService.logUserActivity(
+                                'Admin changed "Convert to MP3" setting to: $value.'); // NEW
+                          } catch (e, st) {
+                            // NEW: Catch and log error
+                            logService.logError(
+                                'Failed to update "Convert to MP3" setting',
+                                e,
+                                st); // NEW
+                            ScaffoldMessenger.of(context).showSnackBar(
+                                // NEW: Show snackbar on error
+                                SnackBar(
+                                    content:
+                                        Text('שגיאה בעדכון הגדרה: $e'))); // NEW
+                          } // NEW
                         },
                       ),
                       const SizedBox(height: 16),
@@ -985,12 +1274,31 @@ class _SettingsManagementTab extends ConsumerWidget {
                               DropdownMenuItem(
                                   value: 320, child: Text('מעולה (320kbps)')),
                             ],
-                            onChanged: (value) {
+                            onChanged: (value) async {
+                              // NEW: Async to allow logging
                               if (value != null) {
-                                ref.read(databaseProvider).updateAppSettings(
-                                      AppSettingsCompanion(
-                                          mp3Bitrate: drift.Value(value)),
-                                    );
+                                try {
+                                  // NEW: Add try-catch for database operation
+                                  await ref
+                                      .read(databaseProvider)
+                                      .updateAppSettings(
+                                        AppSettingsCompanion(
+                                            mp3Bitrate: drift.Value(value)),
+                                      );
+                                  logService.logUserActivity(
+                                      'Admin changed MP3 bitrate setting to: ${value}kbps.'); // NEW
+                                } catch (e, st) {
+                                  // NEW: Catch and log error
+                                  logService.logError(
+                                      'Failed to update MP3 bitrate setting',
+                                      e,
+                                      st); // NEW
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                      // NEW: Show snackbar on error
+                                      SnackBar(
+                                          content: Text(
+                                              'שגיאה בעדכון הגדרה: $e'))); // NEW
+                                } // NEW
                               }
                             },
                           ),
@@ -1004,7 +1312,11 @@ class _SettingsManagementTab extends ConsumerWidget {
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, st) => Center(child: Text('Error loading settings: $e')),
+        error: (e, st) {
+          logService.logError(
+              'Error loading app settings', e, st); // NEW: Log errors
+          return Center(child: Text('Error loading settings: $e'));
+        },
       ),
     );
   }
