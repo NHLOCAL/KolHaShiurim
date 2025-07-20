@@ -110,7 +110,7 @@ class _UsersManagementTab extends ConsumerWidget {
                     Icon(user.isAdmin ? Icons.shield_outlined : Icons.person),
                 title: Text(user.name,
                     style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Text(subtitleText), // שינוי כאן
+                subtitle: Text(subtitleText),
                 isThreeLine: user.additionalInfo != null &&
                     user.additionalInfo!.isNotEmpty, // חדש: מאפשר 3 שורות
                 trailing: Row(
@@ -154,7 +154,7 @@ class _UsersManagementTab extends ConsumerWidget {
   void _showUserDialog(BuildContext context, WidgetRef ref, {User? user}) {
     final nameController = TextEditingController(text: user?.name);
     bool isAdmin = user?.isAdmin ?? false;
-    // חדש: בקר עבור מידע נוסף
+    // בקר עבור מידע נוסף
     final additionalInfoController =
         TextEditingController(text: user?.additionalInfo);
     final formKey = GlobalKey<FormState>();
@@ -179,15 +179,16 @@ class _UsersManagementTab extends ConsumerWidget {
                       textAlign: TextAlign.start,
                     ),
                     const SizedBox(height: 16),
-                    // חדש: שדה למידע נוסף
+                    // שינוי: שדה למידע נוסף עם גובה התחלתי של 3 שורות
                     TextFormField(
                       controller: additionalInfoController,
                       decoration: const InputDecoration(
                           labelText: 'פרטים נוספים (טלפון, שיעור, ועד וכו\')',
                           border: OutlineInputBorder()),
                       textAlign: TextAlign.start,
-                      maxLines: 3, // מאפשר יותר שורות לטקסט חופשי
-                      minLines: 1,
+                      minLines: 3, // שונה ל-3 - הגובה ההתחלתי
+                      maxLines:
+                          5, // ניתן להרחיב עד 5 שורות, או null לגובה בלתי מוגבל
                     ),
                     const SizedBox(height: 16),
                     CheckboxListTile(
@@ -216,7 +217,7 @@ class _UsersManagementTab extends ConsumerWidget {
                       final companion = UsersCompanion(
                         name: drift.Value(nameController.text),
                         isAdmin: drift.Value(isAdmin),
-                        // חדש: שמירת המידע הנוסף
+                        // שמירת המידע הנוסף
                         additionalInfo: drift.Value(
                             additionalInfoController.text.trim().isEmpty
                                 ? null
