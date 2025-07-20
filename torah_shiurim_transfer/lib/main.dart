@@ -9,9 +9,10 @@ import 'package:torah_shiurim_transfer/tray/window_actions.dart';
 void main() async {
   await WindowActions.init();
 
-  await TrayInitializer().init();
-
   final container = ProviderContainer();
+
+  await TrayInitializer(container).init();
+
   WindowActions.router = container.read(routerProvider);
 
   await container.read(databaseProvider).getAppSettings();

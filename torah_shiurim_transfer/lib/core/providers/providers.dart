@@ -39,6 +39,7 @@ class AuthStateNotifier extends StateNotifier<AppUserState> {
         });
 
         if (state.isUser) return;
+        if (state.isAdmin) return;
 
         for (final connectedDevice in devices) {
           final dbDevice = await _ref
