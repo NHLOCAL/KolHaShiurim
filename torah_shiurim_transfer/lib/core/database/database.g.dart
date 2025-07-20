@@ -729,8 +729,14 @@ class $UserRabbiPermissionsTable extends UserRabbiPermissions
       requiredDuringInsert: true,
       defaultConstraints:
           GeneratedColumn.constraintIsAlways('REFERENCES rabbis (id)'));
+  static const VerificationMeta _specificPathMeta =
+      const VerificationMeta('specificPath');
   @override
-  List<GeneratedColumn> get $columns => [userId, rabbiId];
+  late final GeneratedColumn<String> specificPath = GeneratedColumn<String>(
+      'specific_path', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns => [userId, rabbiId, specificPath];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -754,6 +760,12 @@ class $UserRabbiPermissionsTable extends UserRabbiPermissions
     } else if (isInserting) {
       context.missing(_rabbiIdMeta);
     }
+    if (data.containsKey('specific_path')) {
+      context.handle(
+          _specificPathMeta,
+          specificPath.isAcceptableOrUnknown(
+              data['specific_path']!, _specificPathMeta));
+    }
     return context;
   }
 
@@ -767,6 +779,8 @@ class $UserRabbiPermissionsTable extends UserRabbiPermissions
           .read(DriftSqlType.int, data['${effectivePrefix}user_id'])!,
       rabbiId: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}rabbi_id'])!,
+      specificPath: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}specific_path']),
     );
   }
 
@@ -780,12 +794,17 @@ class UserRabbiPermission extends DataClass
     implements Insertable<UserRabbiPermission> {
   final int userId;
   final int rabbiId;
-  const UserRabbiPermission({required this.userId, required this.rabbiId});
+  final String? specificPath;
+  const UserRabbiPermission(
+      {required this.userId, required this.rabbiId, this.specificPath});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['user_id'] = Variable<int>(userId);
     map['rabbi_id'] = Variable<int>(rabbiId);
+    if (!nullToAbsent || specificPath != null) {
+      map['specific_path'] = Variable<String>(specificPath);
+    }
     return map;
   }
 
@@ -793,6 +812,9 @@ class UserRabbiPermission extends DataClass
     return UserRabbiPermissionsCompanion(
       userId: Value(userId),
       rabbiId: Value(rabbiId),
+      specificPath: specificPath == null && nullToAbsent
+          ? const Value.absent()
+          : Value(specificPath),
     );
   }
 
@@ -802,6 +824,7 @@ class UserRabbiPermission extends DataClass
     return UserRabbiPermission(
       userId: serializer.fromJson<int>(json['userId']),
       rabbiId: serializer.fromJson<int>(json['rabbiId']),
+      specificPath: serializer.fromJson<String?>(json['specificPath']),
     );
   }
   @override
@@ -810,18 +833,27 @@ class UserRabbiPermission extends DataClass
     return <String, dynamic>{
       'userId': serializer.toJson<int>(userId),
       'rabbiId': serializer.toJson<int>(rabbiId),
+      'specificPath': serializer.toJson<String?>(specificPath),
     };
   }
 
-  UserRabbiPermission copyWith({int? userId, int? rabbiId}) =>
+  UserRabbiPermission copyWith(
+          {int? userId,
+          int? rabbiId,
+          Value<String?> specificPath = const Value.absent()}) =>
       UserRabbiPermission(
         userId: userId ?? this.userId,
         rabbiId: rabbiId ?? this.rabbiId,
+        specificPath:
+            specificPath.present ? specificPath.value : this.specificPath,
       );
   UserRabbiPermission copyWithCompanion(UserRabbiPermissionsCompanion data) {
     return UserRabbiPermission(
       userId: data.userId.present ? data.userId.value : this.userId,
       rabbiId: data.rabbiId.present ? data.rabbiId.value : this.rabbiId,
+      specificPath: data.specificPath.present
+          ? data.specificPath.value
+          : this.specificPath,
     );
   }
 
@@ -829,54 +861,65 @@ class UserRabbiPermission extends DataClass
   String toString() {
     return (StringBuffer('UserRabbiPermission(')
           ..write('userId: $userId, ')
-          ..write('rabbiId: $rabbiId')
+          ..write('rabbiId: $rabbiId, ')
+          ..write('specificPath: $specificPath')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(userId, rabbiId);
+  int get hashCode => Object.hash(userId, rabbiId, specificPath);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is UserRabbiPermission &&
           other.userId == this.userId &&
-          other.rabbiId == this.rabbiId);
+          other.rabbiId == this.rabbiId &&
+          other.specificPath == this.specificPath);
 }
 
 class UserRabbiPermissionsCompanion
     extends UpdateCompanion<UserRabbiPermission> {
   final Value<int> userId;
   final Value<int> rabbiId;
+  final Value<String?> specificPath;
   final Value<int> rowid;
   const UserRabbiPermissionsCompanion({
     this.userId = const Value.absent(),
     this.rabbiId = const Value.absent(),
+    this.specificPath = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   UserRabbiPermissionsCompanion.insert({
     required int userId,
     required int rabbiId,
+    this.specificPath = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : userId = Value(userId),
         rabbiId = Value(rabbiId);
   static Insertable<UserRabbiPermission> custom({
     Expression<int>? userId,
     Expression<int>? rabbiId,
+    Expression<String>? specificPath,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
       if (userId != null) 'user_id': userId,
       if (rabbiId != null) 'rabbi_id': rabbiId,
+      if (specificPath != null) 'specific_path': specificPath,
       if (rowid != null) 'rowid': rowid,
     });
   }
 
   UserRabbiPermissionsCompanion copyWith(
-      {Value<int>? userId, Value<int>? rabbiId, Value<int>? rowid}) {
+      {Value<int>? userId,
+      Value<int>? rabbiId,
+      Value<String?>? specificPath,
+      Value<int>? rowid}) {
     return UserRabbiPermissionsCompanion(
       userId: userId ?? this.userId,
       rabbiId: rabbiId ?? this.rabbiId,
+      specificPath: specificPath ?? this.specificPath,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -890,6 +933,9 @@ class UserRabbiPermissionsCompanion
     if (rabbiId.present) {
       map['rabbi_id'] = Variable<int>(rabbiId.value);
     }
+    if (specificPath.present) {
+      map['specific_path'] = Variable<String>(specificPath.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -901,6 +947,7 @@ class UserRabbiPermissionsCompanion
     return (StringBuffer('UserRabbiPermissionsCompanion(')
           ..write('userId: $userId, ')
           ..write('rabbiId: $rabbiId, ')
+          ..write('specificPath: $specificPath, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -2300,12 +2347,14 @@ typedef $$UserRabbiPermissionsTableCreateCompanionBuilder
     = UserRabbiPermissionsCompanion Function({
   required int userId,
   required int rabbiId,
+  Value<String?> specificPath,
   Value<int> rowid,
 });
 typedef $$UserRabbiPermissionsTableUpdateCompanionBuilder
     = UserRabbiPermissionsCompanion Function({
   Value<int> userId,
   Value<int> rabbiId,
+  Value<String?> specificPath,
   Value<int> rowid,
 });
 
@@ -2352,6 +2401,9 @@ class $$UserRabbiPermissionsTableFilterComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
+  ColumnFilters<String> get specificPath => $composableBuilder(
+      column: $table.specificPath, builder: (column) => ColumnFilters(column));
+
   $$UsersTableFilterComposer get userId {
     final $$UsersTableFilterComposer composer = $composerBuilder(
         composer: this,
@@ -2402,6 +2454,10 @@ class $$UserRabbiPermissionsTableOrderingComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
+  ColumnOrderings<String> get specificPath => $composableBuilder(
+      column: $table.specificPath,
+      builder: (column) => ColumnOrderings(column));
+
   $$UsersTableOrderingComposer get userId {
     final $$UsersTableOrderingComposer composer = $composerBuilder(
         composer: this,
@@ -2452,6 +2508,9 @@ class $$UserRabbiPermissionsTableAnnotationComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
+  GeneratedColumn<String> get specificPath => $composableBuilder(
+      column: $table.specificPath, builder: (column) => column);
+
   $$UsersTableAnnotationComposer get userId {
     final $$UsersTableAnnotationComposer composer = $composerBuilder(
         composer: this,
@@ -2521,21 +2580,25 @@ class $$UserRabbiPermissionsTableTableManager extends RootTableManager<
           updateCompanionCallback: ({
             Value<int> userId = const Value.absent(),
             Value<int> rabbiId = const Value.absent(),
+            Value<String?> specificPath = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               UserRabbiPermissionsCompanion(
             userId: userId,
             rabbiId: rabbiId,
+            specificPath: specificPath,
             rowid: rowid,
           ),
           createCompanionCallback: ({
             required int userId,
             required int rabbiId,
+            Value<String?> specificPath = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               UserRabbiPermissionsCompanion.insert(
             userId: userId,
             rabbiId: rabbiId,
+            specificPath: specificPath,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0

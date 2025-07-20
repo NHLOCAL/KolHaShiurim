@@ -24,7 +24,8 @@ final _sourceFilesProvider =
   );
 });
 
-final _allowedRabbisProvider = StreamProvider.autoDispose<List<Rabbi>>((ref) {
+final _allowedRabbisProvider =
+    StreamProvider.autoDispose<List<UserPermissionInfo>>((ref) {
   final authState = ref.watch(authStateProvider);
   final db = ref.watch(databaseProvider);
 
@@ -45,7 +46,7 @@ class UserTransferScreen extends ConsumerStatefulWidget {
 
 class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
   File? _selectedFile;
-  Rabbi? _selectedRabbi;
+  UserPermissionInfo? _selectedPermission;
   JewishDate _selectedDate = JewishDate();
   final _topicController = TextEditingController();
   bool _isCopying = false;
@@ -82,14 +83,15 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
   void _resetForm() {
     setState(() {
       _selectedFile = null;
-      _selectedRabbi = null;
+      _selectedPermission = null;
       _topicController.clear();
       _selectedDate = JewishDate();
     });
   }
 
   String _getNewFileName() {
-    if (_selectedRabbi == null || _selectedFile == null) return 'שם קובץ...';
+    if (_selectedPermission == null || _selectedFile == null)
+      return 'שם קובץ...';
     final formatter = HebrewDateFormatter()
       ..hebrewFormat = true
       ..useGershGershayim = false;
@@ -99,12 +101,15 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
     final extension = (_appSettings?.convertToMp3 ?? false)
         ? '.mp3'
         : p.extension(_selectedFile!.path);
-    return '$dateStr - ${_selectedRabbi!.name}${sanitizedTopic.isNotEmpty ? ' - $sanitizedTopic' : ''}$extension';
+    return '$dateStr - ${_selectedPermission!.rabbi.name}${sanitizedTopic.isNotEmpty ? ' - $sanitizedTopic' : ''}$extension';
   }
 
   Future<void> _copyFile() async {
-    if (_selectedFile == null || _selectedRabbi == null || _appSettings == null)
+    if (_selectedFile == null ||
+        _selectedPermission == null ||
+        _appSettings == null) {
       return;
+    }
 
     setState(() => _isCopying = true);
     ref.read(_lastCopiedFileNameProvider.notifier).state = null;
@@ -114,7 +119,11 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
 
     try {
       final newFileName = _getNewFileName();
-      final destinationDirectory = _selectedRabbi!.targetPath;
+      final baseDirectory = _selectedPermission!.rabbi.targetPath;
+      final subDirectory = _selectedPermission!.specificPath ?? '';
+      final destinationDirectory = subDirectory.trim().isEmpty
+          ? baseDirectory
+          : p.join(baseDirectory, subDirectory);
       final destinationPath = p.join(destinationDirectory, newFileName);
       final fileService = ref.read(fileServiceProvider);
 
@@ -393,7 +402,7 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
 
   Widget _buildFormContent(
       ThemeData theme,
-      AsyncValue<List<Rabbi>> allowedRabbisAsync,
+      AsyncValue<List<UserPermissionInfo>> allowedRabbisAsync,
       Color buttonColor,
       Color buttonTextColor,
       String? lastCopiedFileName) {
@@ -454,13 +463,15 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
                 ),
                 const SizedBox(height: 20),
                 allowedRabbisAsync.when(
-                  data: (rabbis) => DropdownButtonFormField<Rabbi>(
-                    value: _selectedRabbi,
-                    items: rabbis
-                        .map((rabbi) => DropdownMenuItem(
-                            value: rabbi, child: Text(rabbi.name)))
+                  data: (permissions) =>
+                      DropdownButtonFormField<UserPermissionInfo>(
+                    value: _selectedPermission,
+                    items: permissions
+                        .map((p) => DropdownMenuItem(
+                            value: p, child: Text(p.rabbi.name)))
                         .toList(),
-                    onChanged: (val) => setState(() => _selectedRabbi = val),
+                    onChanged: (val) =>
+                        setState(() => _selectedPermission = val),
                     decoration: const InputDecoration(
                         labelText: 'בחר רב', border: OutlineInputBorder()),
                   ),
@@ -522,7 +533,7 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
                 color: theme.colorScheme.onPrimary,
                 fontWeight: FontWeight.bold),
           ),
-          onPressed: _selectedRabbi == null ? null : _copyFile,
+          onPressed: _selectedPermission == null ? null : _copyFile,
         ),
       ],
     );

@@ -20,19 +20,21 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 2; // <--- שינוי 1: העלאת הגרסה
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration {
-    // <--- שינוי 2: הוספת אסטרטגיית מיגרציה
     return MigrationStrategy(
       onCreate: (Migrator m) async {
         await m.createAll();
       },
       onUpgrade: (Migrator m, int from, int to) async {
-        if (from == 1) {
-          // מגרסה 1 ל-2 הוספנו את טבלת ההגדרות
+        if (from < 2) {
           await m.createTable(appSettings);
+        }
+        if (from < 3) {
+          await m.addColumn(
+              userRabbiPermissions, userRabbiPermissions.specificPath);
         }
       },
     );
@@ -77,33 +79,42 @@ class AppDatabase extends _$AppDatabase {
   Future<int> deleteRabbi(int id) =>
       (delete(rabbis)..where((r) => r.id.equals(id))).go();
 
-  Stream<List<Rabbi>> watchPermissionsForUser(int userId) {
+  Stream<List<UserPermissionInfo>> watchPermissionsForUser(int userId) {
     final query = select(userRabbiPermissions).join(
         [innerJoin(rabbis, rabbis.id.equalsExp(userRabbiPermissions.rabbiId))])
       ..where(userRabbiPermissions.userId.equals(userId));
-    return query
-        .watch()
-        .map((rows) => rows.map((row) => row.readTable(rabbis)).toList());
+    return query.watch().map((rows) => rows.map((row) {
+          final p = row.readTable(userRabbiPermissions);
+          return UserPermissionInfo(
+            rabbi: row.readTable(rabbis),
+            specificPath: p.specificPath,
+          );
+        }).toList());
   }
 
-  Future<void> setPermissionsForUser(int userId, List<int> rabbiIds) async {
+  Future<void> setPermissionsForUser(
+      int userId, Map<int, String?> permissions) async {
     await transaction(() async {
       await (delete(userRabbiPermissions)
             ..where((p) => p.userId.equals(userId)))
           .go();
-      for (final rabbiId in rabbiIds) {
+      for (final entry in permissions.entries) {
+        final rabbiId = entry.key;
+        final specificPath = entry.value;
         await into(userRabbiPermissions).insert(
             UserRabbiPermissionsCompanion.insert(
-                userId: userId, rabbiId: rabbiId));
+                userId: userId,
+                rabbiId: rabbiId,
+                specificPath: Value(specificPath)));
       }
     });
   }
 
-  Future<List<int>> getPermissionIdsForUser(int userId) async {
+  Future<List<UserRabbiPermission>> getPermissionsForUser(int userId) async {
     final permissions = await (select(userRabbiPermissions)
           ..where((p) => p.userId.equals(userId)))
         .get();
-    return permissions.map((p) => p.rabbiId).toList();
+    return permissions;
   }
 
   Future<int> logTransfer(TransfersCompanion transfer) =>
@@ -135,6 +146,12 @@ class DeviceWithUser {
   final Device device;
   final User user;
   DeviceWithUser({required this.device, required this.user});
+}
+
+class UserPermissionInfo {
+  final Rabbi rabbi;
+  final String? specificPath;
+  UserPermissionInfo({required this.rabbi, this.specificPath});
 }
 
 LazyDatabase _openConnection() {

@@ -224,23 +224,40 @@ class _PermissionsDialog extends ConsumerStatefulWidget {
 }
 
 class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
-  late Future<List<int>> _initialPermissionsFuture;
   Set<int> _selectedRabbiIds = {};
+  Map<int, TextEditingController> _pathControllers = {};
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _initialPermissionsFuture =
-        ref.read(databaseProvider).getPermissionIdsForUser(widget.user.id);
-    _initialPermissionsFuture.then((ids) {
-      if (mounted) {
-        setState(() {
-          _selectedRabbiIds = ids.toSet();
-          _isLoading = false;
-        });
+    _loadInitialPermissions();
+  }
+
+  @override
+  void dispose() {
+    for (var controller in _pathControllers.values) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _loadInitialPermissions() async {
+    final initialPermissions =
+        await ref.read(databaseProvider).getPermissionsForUser(widget.user.id);
+    if (mounted) {
+      final newSelectedIds = <int>{};
+      final newControllers = <int, TextEditingController>{};
+      for (final p in initialPermissions) {
+        newSelectedIds.add(p.rabbiId);
+        newControllers[p.rabbiId] = TextEditingController(text: p.specificPath);
       }
-    });
+      setState(() {
+        _selectedRabbiIds = newSelectedIds;
+        _pathControllers = newControllers;
+        _isLoading = false;
+      });
+    }
   }
 
   @override
@@ -257,19 +274,44 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
                   shrinkWrap: true,
                   children: rabbis.map<Widget>((rabbi) {
                     final isSelected = _selectedRabbiIds.contains(rabbi.id);
-                    return CheckboxListTile(
-                      value: isSelected,
-                      title: Text(rabbi.name),
-                      controlAffinity: ListTileControlAffinity.leading,
-                      onChanged: (checked) {
-                        setState(() {
-                          if (checked == true) {
-                            _selectedRabbiIds.add(rabbi.id);
-                          } else {
-                            _selectedRabbiIds.remove(rabbi.id);
-                          }
-                        });
-                      },
+                    return Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CheckboxListTile(
+                          value: isSelected,
+                          title: Text(rabbi.name),
+                          subtitle: Text(rabbi.targetPath,
+                              textDirection: TextDirection.ltr,
+                              textAlign: TextAlign.right),
+                          controlAffinity: ListTileControlAffinity.leading,
+                          onChanged: (checked) {
+                            setState(() {
+                              if (checked == true) {
+                                _selectedRabbiIds.add(rabbi.id);
+                                _pathControllers[rabbi.id] =
+                                    TextEditingController();
+                              } else {
+                                _selectedRabbiIds.remove(rabbi.id);
+                                _pathControllers.remove(rabbi.id)?.dispose();
+                              }
+                            });
+                          },
+                        ),
+                        if (isSelected)
+                          Padding(
+                            padding:
+                                const EdgeInsets.fromLTRB(16.0, 0, 56.0, 16.0),
+                            child: TextFormField(
+                              controller: _pathControllers[rabbi.id],
+                              decoration: const InputDecoration(
+                                labelText: 'הגבלת תיקיה (אופציונלי)',
+                                hintText: 'לדוגמה: תשפ״ד/שיעורים',
+                                border: OutlineInputBorder(),
+                              ),
+                              textAlign: TextAlign.start,
+                            ),
+                          ),
+                      ],
                     );
                   }).toList(),
                 ),
@@ -287,12 +329,19 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
               ? null
               : () async {
                   setState(() => _isLoading = true);
+                  final permissionsToSet = <int, String?>{};
+                  for (final rabbiId in _selectedRabbiIds) {
+                    final path = _pathControllers[rabbiId]?.text.trim();
+                    permissionsToSet[rabbiId] =
+                        (path != null && path.isNotEmpty)
+                            ? path.replaceAll(r'\', '/')
+                            : null;
+                  }
                   await ref.read(databaseProvider).setPermissionsForUser(
                         widget.user.id,
-                        _selectedRabbiIds.toList(),
+                        permissionsToSet,
                       );
                   if (mounted) {
-                    setState(() => _isLoading = false);
                     Navigator.of(context).pop();
                   }
                 },
@@ -532,10 +581,7 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
           _mountPath = connectedDevice.mountPath;
         });
       }
-    } catch (e) {
-      // Device is in the database but not currently connected.
-      // _mountPath will remain null, which is the correct behavior.
-    }
+    } catch (e) {}
   }
 
   String _generateRandomSerial() {

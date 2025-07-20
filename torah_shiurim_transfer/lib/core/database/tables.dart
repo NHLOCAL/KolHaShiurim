@@ -26,6 +26,8 @@ class Rabbis extends Table {
 class UserRabbiPermissions extends Table {
   IntColumn get userId => integer().references(Users, #id)();
   IntColumn get rabbiId => integer().references(Rabbis, #id)();
+  TextColumn get specificPath => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {userId, rabbiId};
 }
