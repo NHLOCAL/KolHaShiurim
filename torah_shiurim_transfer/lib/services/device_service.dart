@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:io';
-import 'package:device_manager/device_manager.dart'; // הוספת חבילת device_manager
+import 'package:device_manager/device_manager.dart';
 import 'package:torah_shiurim_transfer/models/device_info.dart';
 
 class DeviceService {
@@ -9,18 +9,16 @@ class DeviceService {
 
   DeviceService() {
     if (Platform.isWindows) {
-      // מאזינים לאירועי חיבור/ניתוק התקנים
+      _handleDeviceChange();
       DeviceManager().addListener(_handleDeviceChange);
     }
   }
 
-  /// זרם ששולח רשימת התקנים רק כשיש שינוי.
   Stream<List<ConnectedDeviceInfo>> watchConnectedDevices() {
     return _controller.stream
         .distinct((prev, next) => _areDeviceListsEqual(prev, next));
   }
 
-  /// מטפל באירוע חיבור או ניתוק התקן
   void _handleDeviceChange() async {
     final devices = await _getConnectedVolumes();
     _controller.add(devices);
@@ -39,7 +37,6 @@ class DeviceService {
     final List<ConnectedDeviceInfo> devices = [];
     if (Platform.isWindows) {
       try {
-        // שואלים את כל הדיסקים הלוגיים
         final result = await Process.run(
             'wmic', ['logicaldisk', 'get', 'name,volumeserialnumber']);
         final output = result.stdout.toString();
@@ -76,7 +73,49 @@ class DeviceService {
     return devices;
   }
 
-  /// לבירור: יש לסגור את ה-StreamController בעת סגירת האפליקציה
+  Future<String> changeVolumeSerialNumber(
+      String mountPath, String newSerial) async {
+    if (!Platform.isWindows) {
+      throw UnsupportedError(
+          'Changing serial number is only supported on Windows.');
+    }
+
+    final sanitizedSerial = newSerial.replaceAll('-', '');
+    if (!RegExp(r'^[0-9A-Fa-f]{8}$').hasMatch(sanitizedSerial)) {
+      throw const FormatException(
+          'Invalid serial number format. Must be 8 hexadecimal characters (e.g., 1234-ABCD).');
+    }
+    final formattedSerialForTool =
+        '${sanitizedSerial.substring(0, 4)}-${sanitizedSerial.substring(4)}';
+
+    try {
+      final result = await Process.run(
+          'volumeid.exe', [mountPath, formattedSerialForTool]);
+
+      if (result.exitCode != 0) {
+        final stdErr = result.stderr.toString();
+        if (stdErr.toLowerCase().contains('administrator') ||
+            stdErr.toLowerCase().contains('elevation')) {
+          throw Exception(
+              'Administrator privileges required. Please restart the application as an administrator.');
+        }
+        throw Exception(
+            'Failed to change serial number. Error: $stdErr\nMake sure the drive is not in use.');
+      }
+
+      _handleDeviceChange();
+      return 'Serial change command sent successfully. Please replug the device for the change to take full effect. The new serial is $formattedSerialForTool.';
+    } on ProcessException catch (e) {
+      if (e.errorCode == 2) {
+        throw Exception(
+            '`volumeid.exe` tool not found. Please download it from Microsoft Sysinternals and place it in the application folder or a system PATH directory.');
+      }
+      throw Exception('Error executing volumeid.exe: $e');
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   void dispose() {
     if (!_controller.isClosed) {
       _controller.close();

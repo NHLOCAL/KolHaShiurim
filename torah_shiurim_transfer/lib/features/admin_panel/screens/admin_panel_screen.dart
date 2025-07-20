@@ -1,3 +1,6 @@
+import 'dart:io';
+import 'dart:math';
+
 import 'package:drift/drift.dart' as drift;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -5,7 +8,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:torah_shiurim_transfer/core/database/database.dart';
 import 'package:torah_shiurim_transfer/core/providers/providers.dart';
 import 'package:torah_shiurim_transfer/models/device_info.dart';
-import 'package:torah_shiurim_transfer/services/device_service.dart';
 
 class AdminPanelScreen extends ConsumerWidget {
   const AdminPanelScreen({super.key});
@@ -475,8 +477,20 @@ class _DevicesManagementTab extends ConsumerWidget {
     int? selectedUserId = device?.userId;
     final formKey = GlobalKey<FormState>();
 
+    String? detectedMountPath;
     bool isLoading = false;
+    bool isChangingSerial = false;
     bool isEditingSerial = device == null;
+
+    String generateRandomSerial() {
+      final random = Random();
+      const chars = 'ABCDEF0123456789';
+      final part1 = String.fromCharCodes(Iterable.generate(
+          4, (_) => chars.codeUnitAt(random.nextInt(chars.length))));
+      final part2 = String.fromCharCodes(Iterable.generate(
+          4, (_) => chars.codeUnitAt(random.nextInt(chars.length))));
+      return '$part1-$part2';
+    }
 
     showDialog(
       context: context,
@@ -517,18 +531,17 @@ class _DevicesManagementTab extends ConsumerWidget {
                                     return;
                                   }
 
-                                  final devices = await DeviceService()
-                                      .watchConnectedDevices()
-                                      .first;
+                                  final devices = await ref
+                                      .read(connectedDevicesProvider.future);
+
+                                  if (!context.mounted) return;
+
                                   if (devices.isEmpty) {
-                                    if (context.mounted) {
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
-                                        const SnackBar(
-                                            content: Text(
-                                                "לא נמצאו כוננים חיצוניים.")),
-                                      );
-                                    }
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                          content: Text(
+                                              "לא נמצאו כוננים חיצוניים.")),
+                                    );
                                     setState(() => isLoading = false);
                                     return;
                                   }
@@ -564,8 +577,9 @@ class _DevicesManagementTab extends ConsumerWidget {
 
                                   if (context.mounted) {
                                     setState(() {
+                                      detectedMountPath = drive!.mountPath;
                                       serialController.text =
-                                          drive!.serialNumber;
+                                          drive.serialNumber;
                                       sourcePathController.text = relativePath;
                                       isLoading = false;
                                       isEditingSerial = false;
@@ -603,9 +617,83 @@ class _DevicesManagementTab extends ConsumerWidget {
                                 ? 'נעל עריכה'
                                 : 'אפשר עריכה ידנית',
                           ),
+                          suffixIcon: isEditingSerial
+                              ? IconButton(
+                                  icon: const Icon(Icons.casino_outlined),
+                                  tooltip: 'צור מספר אקראי',
+                                  onPressed: () {
+                                    serialController.text =
+                                        generateRandomSerial();
+                                  },
+                                )
+                              : null,
                         ),
-                        validator: (v) => v!.isEmpty ? 'שדה חובה' : null,
+                        validator: (v) {
+                          if (v == null || v.isEmpty) return 'שדה חובה';
+                          final sanitized = v.replaceAll('-', '');
+                          if (!RegExp(r'^[0-9A-Fa-f]{8}$', caseSensitive: false)
+                              .hasMatch(sanitized)) {
+                            return 'פורמט לא תקין (8 תווים הקסדצימליים)';
+                          }
+                          return null;
+                        },
                       ),
+                      if (Platform.isWindows && detectedMountPath != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8.0),
+                          child: OutlinedButton.icon(
+                            icon: isChangingSerial
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2))
+                                : const Icon(Icons.sync_alt),
+                            label: const Text("שנה מספר סריאלי בהתקן"),
+                            style: OutlinedButton.styleFrom(
+                                minimumSize: const Size(double.infinity, 40),
+                                foregroundColor:
+                                    Theme.of(context).colorScheme.primary),
+                            onPressed: isChangingSerial
+                                ? null
+                                : () async {
+                                    if (formKey.currentState?.validate() ??
+                                        false) {
+                                      setState(() => isChangingSerial = true);
+                                      try {
+                                        final resultMessage = await ref
+                                            .read(deviceServiceProvider)
+                                            .changeVolumeSerialNumber(
+                                                detectedMountPath!,
+                                                serialController.text);
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            SnackBar(
+                                                content: Text(
+                                                    'הפעולה הצליחה: $resultMessage'),
+                                                backgroundColor: Colors.green),
+                                          );
+                                        }
+                                      } catch (e) {
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            SnackBar(
+                                                content: Text('שגיאה: $e'),
+                                                backgroundColor: Colors.red),
+                                          );
+                                        }
+                                      } finally {
+                                        if (context.mounted) {
+                                          setState(
+                                              () => isChangingSerial = false);
+                                        }
+                                      }
+                                    }
+                                  },
+                          ),
+                        ),
                       const SizedBox(height: 16),
                       TextFormField(
                         controller: sourcePathController,
