@@ -11,6 +11,9 @@ void main() async {
 
   final container = ProviderContainer();
 
+  WindowActions.onWindowCloseCallback =
+      () => container.read(authStateProvider.notifier).logout();
+
   await TrayInitializer(container).init();
 
   WindowActions.router = container.read(routerProvider);

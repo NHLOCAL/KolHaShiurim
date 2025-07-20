@@ -10,6 +10,7 @@ import 'package:win32/win32.dart' as win32;
 
 class WindowActions {
   static late GoRouter router;
+  static VoidCallback? onWindowCloseCallback;
 
   static Future<void> init() async {
     WidgetsFlutterBinding.ensureInitialized();
@@ -32,10 +33,8 @@ class WindowActions {
   static void _forceShowOnTop() {
     if (!Platform.isWindows) return;
 
-    // 1. Allocate UTF‑16 title
     final ptrTitle = 'העברת שיעורי תורה'.toNativeUtf16();
 
-    // 2. Call FindWindow(nullptr, title)
     final hwnd = win32.FindWindow(
       dart_ffi.nullptr.cast<Utf16>(),
       ptrTitle,
@@ -66,9 +65,7 @@ class WindowActions {
     if (!Platform.isWindows) {
       try {
         await windowManager.setMovable(true);
-      } on MissingPluginException {
-        // not supported everywhere
-      }
+      } on MissingPluginException {}
     }
 
     await windowManager.setTitleBarStyle(TitleBarStyle.normal);
@@ -84,9 +81,7 @@ class WindowActions {
     if (!Platform.isWindows) {
       try {
         await windowManager.setMovable(false);
-      } on MissingPluginException {
-        // ignore
-      }
+      } on MissingPluginException {}
     }
 
     await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
@@ -125,11 +120,9 @@ class WindowActions {
 class _WindowListener extends WindowListener {
   @override
   void onWindowClose() {
-    WindowActions.hide();
+    WindowActions.onWindowCloseCallback?.call();
   }
 
   @override
-  void onWindowFocus() {
-    // optional debug hook
-  }
+  void onWindowFocus() {}
 }
