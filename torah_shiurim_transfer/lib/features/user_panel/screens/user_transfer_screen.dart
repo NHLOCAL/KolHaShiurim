@@ -123,8 +123,9 @@ class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
   }
 
   String _getNewFileName() {
-    if (_selectedPermission == null || _selectedFile == null)
+    if (_selectedPermission == null || _selectedFile == null) {
       return 'שם קובץ...';
+    }
     final formatter = HebrewDateFormatter()
       ..hebrewFormat = true
       ..useGershGershayim = false;

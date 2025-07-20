@@ -28,12 +28,12 @@ dependencies:
   virtual_keyboard_multi_language: ^1.0.0
   ffi: ^2.0.2
 
-  # תלויות לניהול חלון ומגש מערכת
+
   window_manager: ^0.4.3
   tray_manager: ^0.5.0
 
-  # --- הוספת תלות חדשה ---
-  # מאפשר קריאות ישירות ל-Win32 API כדי לכפות חלון לחזית
+
+
   win32: ^5.5.0
 
 dev_dependencies:
@@ -43,9 +43,10 @@ dev_dependencies:
   build_runner: ^2.4.9
   drift_dev: ^2.17.0
   freezed: ^2.5.2
+  flutter_launcher_icons: ^0.13.1
 
-# הפתרון להתנגשות הגרסאות:
-# כופה על כל החבילות להשתמש בגרסה זו של intl
+
+
 dependency_overrides:
   intl: 0.20.2
 
@@ -53,3 +54,9 @@ flutter:
   uses-material-design: true
   assets:
     - assets/icons/app_icon.ico
+
+flutter_launcher_icons:
+  windows:
+    generate: true
+    image_path: "assets/icons/app_icon.ico"
+    icon_size: 256
