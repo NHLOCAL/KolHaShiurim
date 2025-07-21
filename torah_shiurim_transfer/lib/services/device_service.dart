@@ -38,11 +38,11 @@ class DeviceService {
         if (GetDriveType(root.toNativeUtf16()) != DRIVE_REMOVABLE) continue;
 
         final lpRootPathName = root.toNativeUtf16();
-        final pVolumeNameBuffer    = calloc<Utf16>(MAX_PATH);
+        final pVolumeNameBuffer    = calloc<Uint16>(MAX_PATH).cast<Utf16>();
         final pSerialNumber        = calloc<Uint32>();
         final pMaxComponentLen     = calloc<Uint32>();
         final pFileSystemFlags     = calloc<Uint32>();
-        final pFileSystemNameBuffer= calloc<Utf16>(MAX_PATH);
+        final pFileSystemNameBuffer= calloc<Uint16>(MAX_PATH).cast<Utf16>();
 
         final success = GetVolumeInformation(
           lpRootPathName,
