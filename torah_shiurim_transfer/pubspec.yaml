@@ -26,7 +26,7 @@ dependencies:
   kosher_dart: ^2.0.17
   material_hebrew_date_picker: ^1.2.2
   virtual_keyboard_multi_language: ^1.0.0
-  ffi: ^2.1.2 # גרסה מעודכנת
+  ffi: ^2.1.2
   window_manager: ^0.4.3
   tray_manager: ^0.5.0
   win32: any

@@ -8,6 +8,7 @@ import 'package:torah_shiurim_transfer/models/app_user.dart';
 import 'package:torah_shiurim_transfer/services/device_service.dart';
 import 'package:torah_shiurim_transfer/services/file_service.dart';
 import 'package:torah_shiurim_transfer/services/log_service.dart';
+import 'package:torah_shiurim_transfer/models/device_info.dart';
 import 'package:torah_shiurim_transfer/tray/window_actions.dart';
 
 final licenseManagerProvider = FutureProvider<LicenseManager>((ref) async {
