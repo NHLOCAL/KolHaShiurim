@@ -24,9 +24,7 @@ class DeviceService {
   }
 
   void _startPollingDrives({Duration interval = const Duration(seconds: 5)}) {
-    // Initial load
-    _refreshDevices();
-    // Periodic polling
+    _refreshDevices(); // Initial load
     _pollingTimer = Timer.periodic(interval, (_) {
       _refreshDevices();
     });
@@ -43,17 +41,18 @@ class DeviceService {
         final letter = String.fromCharCode(65 + i);
         final mountPath = '$letter:\\';
 
-        final driveType = GetDriveType(TEXT(mountPath));
+        final driveType = GetDriveType(mountPath.toNativeUtf16());
         if (driveType != DRIVE_REMOVABLE) continue;
 
+        final lpRootPathName = mountPath.toNativeUtf16();
         final pVolumeNameBuffer = calloc<Uint16>(MAX_PATH);
-        final pSerialNumber = calloc<Uint32>();
+        final pSerialNumber    = calloc<Uint32>();
         final pMaxComponentLen = calloc<Uint32>();
         final pFileSystemFlags = calloc<Uint32>();
         final pFileSystemNameBuffer = calloc<Uint16>(MAX_PATH);
 
         final success = GetVolumeInformation(
-          TEXT(mountPath),
+          lpRootPathName,
           pVolumeNameBuffer,
           MAX_PATH,
           pSerialNumber,
@@ -78,7 +77,7 @@ class DeviceService {
           );
         }
 
-        // Free allocated memory
+        free(lpRootPathName);
         free(pVolumeNameBuffer);
         free(pSerialNumber);
         free(pMaxComponentLen);
@@ -87,8 +86,7 @@ class DeviceService {
       }
 
       _controller.add(devices);
-      _logService.logInfo(
-          'Detected ${devices.length} removable volumes via Win32 API.');
+      _logService.logInfo('Detected ${devices.length} removable volumes.');
     } catch (e, st) {
       _logService.logError('Error enumerating drives', e, st);
     }
@@ -104,7 +102,6 @@ class DeviceService {
     return aSet.containsAll(bSet) && bSet.containsAll(aSet);
   }
 
-  /// משנה את מספר הסידורי של דיסק באמצעות כלי חיצוני (volumeid.exe)
   Future<String> changeVolumeSerialNumber(
     String mountPath,
     String newSerial,
@@ -114,6 +111,7 @@ class DeviceService {
     );
 
     final sanitized = newSerial.replaceAll('-', '');
+    // RegExp must be closed and anchored for exactly 8 hex digits
     if (!RegExp(r'^[0-9A-Fa-f]{8}$').hasMatch(sanitized)) {
       _logService.logError('Invalid serial format: $newSerial');
       throw FormatException(
@@ -123,31 +121,31 @@ class DeviceService {
 
     final formatted = '${sanitized.substring(0, 4)}-${sanitized.substring(4)}';
 
-    // יש להשתמש ב־volumeid.exe של Sysinternals כדי לשנות את הסידורי
     final result = await Process.run(
       'volumeid.exe',
       [mountPath, formatted],
       runInShell: true,
     );
+
     if (result.exitCode != 0) {
-      final stderr = result.stderr.toString();
-      _logService.logError('volumeid.exe failed: $stderr');
+      _logService.logError('volumeid.exe failed: ${result.stderr}');
       throw Exception(
         'Failed to change serial. Ensure volumeid.exe is in PATH and run as admin.',
       );
     }
 
-    // ריענון הרשימה לאחר השינוי
-    await _refreshDevices();
+    await _refreshDevices(); // Update stream after change
     _logService.logUserActivity(
       'Serial for $mountPath changed to $formatted.',
     );
-    return 'Serial changed to $formatted. Please replug the device to apply.';
+    return 'Serial changed to $formatted. Replug device to apply.';
   }
 
   void dispose() {
     _pollingTimer?.cancel();
-    if (!_controller.isClosed) _controller.close();
+    if (!_controller.isClosed) {
+      _controller.close();
+    }
     _logService.logInfo('DeviceService disposed.');
   }
 }
