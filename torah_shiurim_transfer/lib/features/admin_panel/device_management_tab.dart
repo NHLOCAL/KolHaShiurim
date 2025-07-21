@@ -151,6 +151,7 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
     _sourcePathController =
         TextEditingController(text: widget.device?.sourcePath);
     _selectedUserId = widget.device?.userId;
+    _mountPath = widget.device?.mountPath; //
     _isEditingSerial = widget.device == null;
 
     if (widget.device != null) {
@@ -333,6 +334,7 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
       final serialNumber = _serialController.text;
       final companion = DevicesCompanion(
         serialNumber: drift.Value(serialNumber),
+        mountPath: drift.Value(_mountPath!),
         sourcePath: drift.Value(_sourcePathController.text),
         userId: drift.Value(_selectedUserId!),
       );
@@ -342,12 +344,12 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
           final newDeviceId =
               await ref.read(databaseProvider).insertDevice(companion);
           _logService.logUserActivity(
-              'Admin added new device: $serialNumber (ID: $newDeviceId), assigned to user ID: $_selectedUserId, SourcePath: ${_sourcePathController.text}');
+              'Admin added new device: $serialNumber (ID: $newDeviceId), assigned to user ID: $_selectedUserId, MountPath: $_mountPath, SourcePath: ${_sourcePathController.text}');
         } else {
           await ref.read(databaseProvider).updateDevice(
               companion.copyWith(id: drift.Value(widget.device!.id)));
           _logService.logUserActivity(
-              'Admin updated device: ${widget.device!.serialNumber} (ID: ${widget.device!.id}) to $serialNumber, assigned to user ID: $_selectedUserId, SourcePath: ${_sourcePathController.text}');
+              'Admin updated device: ${widget.device!.serialNumber} (ID: ${widget.device!.id}) to $serialNumber, assigned to user ID: $_selectedUserId, MountPath: $_mountPath, SourcePath: ${_sourcePathController.text}');
         }
         if (mounted) {
           Navigator.of(context).pop();
