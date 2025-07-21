@@ -17,8 +17,8 @@ dependencies:
   virtual_keyboard_custom_layout: ^1.0.1
   drift: ^2.17.0
   sqlite3_flutter_libs: ^0.5.21
-  path_provider: ^2.1.3
-  path: ^1.9.0
+  path_provider: any
+  path: any
   file_picker: ^8.0.0+1
   go_router: ^13.2.4
   freezed_annotation: ^2.4.1
@@ -26,15 +26,13 @@ dependencies:
   kosher_dart: ^2.0.17
   material_hebrew_date_picker: ^1.2.2
   virtual_keyboard_multi_language: ^1.0.0
-  ffi: ^2.0.2
-
-
+  ffi: ^2.1.2 # גרסה מעודכנת
   window_manager: ^0.4.3
   tray_manager: ^0.5.0
-
-
-
-  win32: ^5.5.0
+  win32: any
+  pointycastle: any
+  basic_utils: any
+  windows_system_info: ^0.0.4
 
 dev_dependencies:
   flutter_test:
@@ -45,8 +43,6 @@ dev_dependencies:
   freezed: ^2.5.2
   flutter_launcher_icons: ^0.13.1
 
-
-
 dependency_overrides:
   intl: 0.20.2
 
@@ -54,9 +50,4 @@ flutter:
   uses-material-design: true
   assets:
     - assets/icons/app_icon.ico
-
-flutter_launcher_icons:
-  windows:
-    generate: true
-    image_path: "assets/icons/app_icon.ico"
-    icon_size: 256
+    - assets/keys/public.pem

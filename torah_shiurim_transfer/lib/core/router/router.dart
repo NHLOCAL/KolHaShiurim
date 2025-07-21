@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:torah_shiurim_transfer/core/providers/providers.dart';
 import 'package:torah_shiurim_transfer/features/admin_panel/screens/admin_panel_screen.dart';
-// auth_gate_screen יובא מכאן, אין בו צורך יותר
+import 'package:torah_shiurim_transfer/features/licensing/screens/license_screen.dart'; // Import חדש
 import 'package:torah_shiurim_transfer/features/user_panel/screens/user_transfer_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -16,10 +16,24 @@ final routerProvider = Provider<GoRouter>((ref) {
   ref.onDispose(refreshListenable.dispose);
 
   return GoRouter(
-    initialLocation: '/admin', // התחל תמיד במסך הניהול
+    initialLocation: '/admin',
     refreshListenable: refreshListenable,
     routes: [
-      // הסרנו את הנתיב '/' שהוביל למסך הכניסה
+      GoRoute(
+        path: '/license',
+        builder: (context, state) {
+          // נטען את ה-provider באופן אסינכרוני ונציג מסך טעינה
+          final licenseManagerAsync = ref.watch(licenseManagerProvider);
+          return licenseManagerAsync.when(
+            data: (manager) => LicenseScreen(licenseManager: manager),
+            loading: () => const Scaffold(
+                body: Center(child: CircularProgressIndicator())),
+            error: (err, stack) => Scaffold(
+                body:
+                    Center(child: Text('Error loading license manager: $err'))),
+          );
+        },
+      ),
       GoRoute(
         path: '/user',
         builder: (context, state) => const UserTransferScreen(),
@@ -29,26 +43,37 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const AdminPanelScreen(),
       ),
     ],
-    redirect: (context, state) {
+    redirect: (context, state) async {
+      // --- License Check Block START ---
+      final licenseManager = await ref.read(licenseManagerProvider.future);
+      final isLicensed = await licenseManager.hasValidLicense();
+      final isOnLicenseScreen = state.uri.path == '/license';
+
+      if (!isLicensed) {
+        return isOnLicenseScreen
+            ? null
+            : '/license'; // אם אין רישיון, כפה מעבר למסך הרישוי
+      }
+
+      if (isLicensed && isOnLicenseScreen) {
+        return '/admin'; // אם יש רישיון ונמצאים במסך רישוי, עבור למסך הראשי
+      }
+      // --- License Check Block END ---
+
       final currentLocation = state.uri.path;
 
-      // כאשר המשתמש מנותק (התקן נותק), החלון מוסתר על ידי ה-Notifier.
-      // ה-redirect יוודא שהמצב הלוגי חוזר למסך הניהול.
       if (authState.isLoggedOut && currentLocation != '/admin') {
         return '/admin';
       }
 
-      // אם המצב הוא "מנהל" והמיקום אינו פאנל הניהול, הפנה אותו לשם.
       if (authState.isAdmin && currentLocation != '/admin') {
         return '/admin';
       }
 
-      // אם המצב הוא "משתמש" (התקן חובר) והוא לא במסך המשתמש, הפנה אותו לשם.
       if (authState.isUser && currentLocation != '/user') {
         return '/user';
       }
 
-      // אין צורך בהפניה
       return null;
     },
   );

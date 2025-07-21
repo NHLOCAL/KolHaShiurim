@@ -1,17 +1,29 @@
+import 'dart:ffi' as ffi; // For Pointer and ffi.nullptr
+// If you still need Utf8/malloc, etc.
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import 'package:torah_shiurim_transfer/core/providers/providers.dart';
 import 'package:torah_shiurim_transfer/core/router/router.dart';
 import 'package:torah_shiurim_transfer/tray/tray_initializer.dart';
 import 'package:torah_shiurim_transfer/tray/window_actions.dart';
 
+import 'package:win32/win32.dart';
+
 void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize COM for apartment threading
+  final hr = CoInitializeEx(ffi.nullptr, COINIT_APARTMENTTHREADED);
+  if (FAILED(hr)) {
+    throw WindowsException(hr);
+  }
+
   await WindowActions.init();
 
   final container = ProviderContainer();
-
-  // אתחול שירות הלוג לפני כל שימוש בו
   final logService = container.read(logServiceProvider);
   await logService.init();
 
@@ -22,14 +34,12 @@ void main() async {
 
   await TrayInitializer(container).init();
 
-  WindowActions.router = container.read(routerProvider);
+  // Provide router to WindowActions after creation
+  final router = container.read(routerProvider);
+  WindowActions.router = router;
 
-  // וודא שהגדרות האפליקציה נטענות מוקדם
   await container.read(databaseProvider).getAppSettings();
   logService.logInfo('App settings loaded.');
-
-  await container.read(authStateProvider.notifier).loginAsAdmin();
-  logService.logInfo('Initial admin login attempt completed.');
 
   runApp(
     UncontrolledProviderScope(
@@ -37,6 +47,9 @@ void main() async {
       child: const MyApp(),
     ),
   );
+
+  // (Optional) Uninitialize COM when the app really closes
+  // CoUninitialize();
 }
 
 class MyApp extends ConsumerWidget {
@@ -45,8 +58,6 @@ class MyApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
-    // NEW: הסרת ההתייחסות ל-logService מתוך מתודת ה-build של MyApp
-    // final logService = ref.watch(logServiceProvider);
 
     return MaterialApp.router(
       title: 'העברת שיעורי תורה',

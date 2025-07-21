@@ -1,10 +1,18 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:torah_shiurim_transfer/core/database/database.dart';
+import 'package:torah_shiurim_transfer/core/license/license_manager.dart'; // Import חדש
 import 'package:torah_shiurim_transfer/models/app_user.dart';
 import 'package:torah_shiurim_transfer/services/device_service.dart';
 import 'package:torah_shiurim_transfer/services/file_service.dart';
 import 'package:torah_shiurim_transfer/services/log_service.dart';
 import 'package:torah_shiurim_transfer/tray/window_actions.dart';
+
+final licenseManagerProvider = FutureProvider<LicenseManager>((ref) async {
+  final pubPem = await rootBundle.loadString('assets/keys/public.pem');
+  final publicKey = parsePublicKeyFromPem(pubPem);
+  return LicenseManager(publicKey);
+});
 
 final databaseProvider = Provider<AppDatabase>((ref) => AppDatabase());
 final logServiceProvider = Provider<LogService>((ref) => LogService());
