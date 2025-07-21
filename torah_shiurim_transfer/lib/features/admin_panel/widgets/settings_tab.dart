@@ -166,6 +166,7 @@ class SettingsTab extends ConsumerWidget {
             await db.into(db.devices).insert(DevicesCompanion.insert(
                   userId: newUserId,
                   serialNumber: deviceMap['serialNumber'],
+                  mountPath: deviceMap['mountPath'] ?? '',
                   sourcePath: deviceMap['sourcePath'],
                 ));
           }
