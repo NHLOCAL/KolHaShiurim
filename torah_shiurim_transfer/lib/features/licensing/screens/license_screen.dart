@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter/services.dart'; // Import for Clipboard
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:torah_shiurim_transfer/core/license/license_manager.dart';
@@ -32,6 +32,8 @@ class _LicenseScreenState extends ConsumerState<LicenseScreen> {
     final fp = await widget.licenseManager.getHardwareFingerprint();
     if (mounted) {
       setState(() {
+        // The getHardwareFingerprint method now returns the canonical form (no padding),
+        // so no further stripping is needed here for display/copy.
         _hardwareFingerprint = fp;
       });
     }
@@ -77,10 +79,8 @@ class _LicenseScreenState extends ConsumerState<LicenseScreen> {
       _statusMessage = 'מאמת רישיון...';
     });
 
-    // Get the log service from the provider
     final logService = ref.read(logServiceProvider);
 
-    // Pass the log service to the verification function
     final valid = await widget.licenseManager
         .verifyAndSaveLicense(_controller.text, logService);
 
@@ -171,10 +171,35 @@ class _LicenseScreenState extends ConsumerState<LicenseScreen> {
                         const Text('טביעת אצבע של חומרה זו:',
                             style: TextStyle(fontWeight: FontWeight.bold)),
                         const SizedBox(height: 4),
-                        SelectableText(_hardwareFingerprint,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                                fontFamily: 'monospace', fontSize: 12)),
+                        Row(
+                          // Add a Row to place the SelectableText and Copy button side-by-side
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Expanded(
+                              // Make SelectableText take available space
+                              child: SelectableText(_hardwareFingerprint,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                      fontFamily: 'monospace', fontSize: 12)),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.copy, size: 18),
+                              tooltip: 'העתק טביעת אצבע',
+                              onPressed: () {
+                                Clipboard.setData(
+                                    ClipboardData(text: _hardwareFingerprint));
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('טביעת אצבע הועתקה ללוח.'),
+                                    duration: Duration(seconds: 2),
+                                  ),
+                                );
+                                ref.read(logServiceProvider).logUserActivity(
+                                    'Hardware fingerprint copied to clipboard.');
+                              },
+                            ),
+                          ],
+                        ),
                       ],
                     ),
                   ),

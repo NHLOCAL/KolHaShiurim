@@ -75,23 +75,21 @@ class LicenseManager {
     final concat = 'cpu:$cpuId;disk:$diskSerial;mac:$macAddress';
     final hash =
         SHA256Digest().process(Uint8List.fromList(utf8.encode(concat)));
-    return base64Url.encode(hash);
+    // Explicitly remove padding for Base64Url canonical form.
+    return base64Url.encode(hash).replaceAll('=', '');
   }
 
   Future<bool> verifyLicense(String licenseJson, LogService logService) async {
     await logService.logInfo("--- Starting License Verification ---");
     try {
-      // 1. Parse JSON
       final jsonMap = json.decode(licenseJson) as Map<String, dynamic>;
       await logService.logInfo("Step 1: License JSON parsed successfully.");
 
-      // 2. Decode signature (URL‑safe Base64)
       final sigB64 = jsonMap['signature'] as String;
       final signatureBytes = base64Url.decode(sigB64);
       await logService.logInfo(
           "Step 2: Signature decoded. Length: ${signatureBytes.length} bytes.");
 
-      // 3. Build canonical payload map
       final payloadMap = {
         'fingerprint': jsonMap['fingerprint'],
         'issued_to': jsonMap['issued_to'],
@@ -108,7 +106,6 @@ class LicenseManager {
       await logService.logInfo(payloadString);
       await logService.logInfo("--- END CRITICAL PAYLOAD CHECK ---");
 
-      // 5. Verify signature
       final verifier = RSASigner(SHA256Digest(), '0609608648016503040201');
       verifier.init(false, PublicKeyParameter<RSAPublicKey>(publicKey));
       final payloadBytesUint8 = Uint8List.fromList(payloadBytes);
@@ -122,7 +119,6 @@ class LicenseManager {
         return false;
       }
 
-      // 6. Date validity
       final now = DateTime.now();
       final issuedOn = DateTime.parse(jsonMap['issued_on']);
       final validUntil = DateTime.parse(jsonMap['valid_until']);
@@ -133,12 +129,16 @@ class LicenseManager {
         return false;
       }
 
-      // 7. Fingerprint check
       final localFp = await getHardwareFingerprint();
-      final licenseFp = jsonMap['fingerprint'] as String;
-      final fpMatch = localFp == licenseFp;
+      final licenseJsonFp = jsonMap['fingerprint'] as String;
+
+      // Ensure both fingerprints are in canonical form (no padding) for comparison
+      final localFpCanonical = localFp.replaceAll('=', '');
+      final licenseFpCanonical = licenseJsonFp.replaceAll('=', '');
+
+      final fpMatch = localFpCanonical == licenseFpCanonical;
       await logService.logInfo(
-          "Step 5: Fingerprints – Local: $localFp, License: $licenseFp");
+          "Step 5: Fingerprints – Local (canonical): $localFpCanonical, License (canonical): $licenseFpCanonical");
       if (!fpMatch) {
         await logService
             .logWarning("Verification FAILED: Fingerprint mismatch.");
