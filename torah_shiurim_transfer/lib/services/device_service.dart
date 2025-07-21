@@ -1,7 +1,8 @@
 import 'dart:async';
-import 'dart:convert';
+import 'dart:ffi';
 import 'dart:io';
-import 'package:device_manager/device_manager.dart';
+import 'package:ffi/ffi.dart';
+import 'package:win32/win32.dart';
 import 'package:torah_shiurim_transfer/models/device_info.dart';
 import 'package:torah_shiurim_transfer/services/log_service.dart';
 
@@ -9,204 +10,135 @@ class DeviceService {
   final StreamController<List<ConnectedDeviceInfo>> _controller =
       StreamController.broadcast();
   final LogService _logService;
+  Timer? _pollingTimer;
 
   DeviceService(this._logService) {
-
     _logService.logInfo('DeviceService initialized.');
-    if (Platform.isWindows) {
-      _handleDeviceChange();
-      DeviceManager().addListener(_handleDeviceChange);
-      _logService.logInfo('DeviceManager listener added for Windows.');
-    } else {
-
-      _logService.logInfo(
-          'DeviceManager listener not supported on current platform: ${Platform.operatingSystem}');
-
-      _handleDeviceChange();
-    }
+    _startPollingDrives();
   }
 
   Stream<List<ConnectedDeviceInfo>> watchConnectedDevices() {
-    return _controller.stream
-        .distinct((prev, next) => _areDeviceListsEqual(prev, next));
+    return _controller.stream.distinct(
+      (prev, next) => _areDeviceListsEqual(prev, next),
+    );
   }
 
-  void _handleDeviceChange() async {
-    _logService.logInfo('Handling device change event.');
+  void _startPollingDrives({Duration interval = const Duration(seconds: 5)}) {
+    // Initial load
+    _refreshDevices();
+    // Set up periodic polling
+    _pollingTimer = Timer.periodic(interval, (_) {
+      _refreshDevices();
+    });
+  }
+
+  Future<void> _refreshDevices() async {
+    _logService.logInfo('Refreshing connected volumes via Win32 API.');
     try {
+      final devices = <ConnectedDeviceInfo>[];
+      final driveBitmask = GetLogicalDrives();
 
-      final devices = await _getConnectedVolumes();
+      for (var i = 0; i < 26; i++) {
+        if ((driveBitmask & (1 << i)) == 0) continue;
+        final letter = String.fromCharCode(65 + i);
+        final mountPath = '$letter:\\';
+
+        final lpRootPathName = mountPath.toNativeUtf16();
+        final pVolumeNameBuffer = calloc<Uint16>(MAX_PATH);
+        final pSerialNumber = calloc<Uint32>();
+        final pMaxComponentLen = calloc<Uint32>();
+        final pFileSystemFlags = calloc<Uint32>();
+        final pFileSystemNameBuffer = calloc<Uint16>(MAX_PATH);
+
+        final success = GetVolumeInformationW(
+          lpRootPathName,
+          pVolumeNameBuffer,
+          MAX_PATH,
+          pSerialNumber,
+          pMaxComponentLen,
+          pFileSystemFlags,
+          pFileSystemNameBuffer,
+          MAX_PATH,
+        );
+
+        if (success != 0) {
+          final serialHex = pSerialNumber.value.toRadixString(16).toUpperCase().padLeft(8, '0');
+          final formattedSerial = '${serialHex.substring(0, 4)}-${serialHex.substring(4)}';
+          devices.add(
+            ConnectedDeviceInfo(
+              mountPath: mountPath,
+              serialNumber: formattedSerial,
+            ),
+          );
+        }
+
+        // Free allocated memory
+        free(lpRootPathName);
+        free(pVolumeNameBuffer);
+        free(pSerialNumber);
+        free(pMaxComponentLen);
+        free(pFileSystemFlags);
+        free(pFileSystemNameBuffer);
+      }
+
       _controller.add(devices);
-      _logService.logInfo(
-          'Updated connected devices list: ${devices.length} devices found.');
+      _logService.logInfo('Detected ${devices.length} volumes via Win32 API.');
     } catch (e, st) {
-
-      _logService.logError('Error handling device change', e, st);
+      _logService.logError('Error enumerating drives', e, st);
     }
   }
 
   bool _areDeviceListsEqual(
-      List<ConnectedDeviceInfo> a, List<ConnectedDeviceInfo> b) {
+    List<ConnectedDeviceInfo> a,
+    List<ConnectedDeviceInfo> b,
+  ) {
     if (a.length != b.length) return false;
-    final aSerials = a.map((d) => d.serialNumber).toSet();
-    final bSerials = b.map((d) => d.serialNumber).toSet();
-    return aSerials.difference(bSerials).isEmpty &&
-        bSerials.difference(aSerials).isEmpty;
-  }
-
-  Future<List<ConnectedDeviceInfo>> _getConnectedVolumes() async {
-    final List<ConnectedDeviceInfo> devices = [];
-    if (Platform.isWindows) {
-      try {
-        final result = await Process.run('powershell.exe', [
-          '-NoProfile',
-          '-Command',
-          "Get-CimInstance -ClassName Win32_LogicalDisk | Select-Object DeviceID, VolumeSerialNumber | Where-Object { \$_.VolumeSerialNumber -ne \$null } | ConvertTo-Json"
-        ]);
-
-        if (result.exitCode != 0) {
-          _logService.logError(
-              "PowerShell command to get volumes failed with exit code ${result.exitCode}",
-              result.stderr,
-              StackTrace.current);
-          return [];
-        }
-
-        final output = result.stdout.toString().trim();
-        if (output.isEmpty) {
-          _logService.logInfo('No volumes found from PowerShell.');
-          return [];
-        }
-
-        final jsonResult = jsonDecode(output);
-        
-        final List<dynamic> driveList =
-            jsonResult is List ? jsonResult : [jsonResult];
-
-        for (final driveData in driveList) {
-          if (driveData is Map<String, dynamic> &&
-              driveData.containsKey('DeviceID') &&
-              driveData.containsKey('VolumeSerialNumber')) {
-            final drive = driveData['DeviceID'] as String;
-            final serial = driveData['VolumeSerialNumber'] as String;
-            if (drive.isNotEmpty && serial.isNotEmpty) {
-              devices.add(
-                  ConnectedDeviceInfo(mountPath: drive, serialNumber: serial));
-            }
-          }
-        }
-        _logService.logInfo(
-            'Detected ${devices.length} volumes on Windows via PowerShell.');
-      } catch (e, st) {
-        _logService.logError(
-            "Error getting drives on Windows using PowerShell", e, st);
-      }
-    } else {
-      
-      final dir = Directory('/Volumes');
-      if (await dir.exists()) {
-        try {
-
-          await for (final entity in dir.list()) {
-            if (entity is Directory) {
-              devices.add(ConnectedDeviceInfo(
-                  mountPath: entity.path,
-                  serialNumber:
-                      entity.path));
-            }
-          }
-          _logService.logInfo(
-              'Detected ${devices.length} volumes on non-Windows via /Volumes.');
-        } catch (e, st) {
-
-          _logService.logError(
-              "Error getting drives on non-Windows from /Volumes",
-              e,
-              st);
-        }
-      } else {
-
-        _logService.logWarning(
-            'Directory /Volumes does not exist on this non-Windows system.');
-      }
-    }
-    return devices;
+    final aSet = a.map((d) => d.serialNumber).toSet();
+    final bSet = b.map((d) => d.serialNumber).toSet();
+    return aSet.containsAll(bSet) && bSet.containsAll(aSet);
   }
 
   Future<String> changeVolumeSerialNumber(
-      String mountPath, String newSerial) async {
+    String mountPath,
+    String newSerial,
+  ) async {
     _logService.logUserActivity(
-        'Attempting to change serial number for $mountPath to $newSerial.');
-    if (!Platform.isWindows) {
-      _logService.logError(
-          'Attempted to change serial number on unsupported platform: ${Platform.operatingSystem}');
-      throw UnsupportedError(
-          'Changing serial number is only supported on Windows.');
+      'Changing serial for $mountPath to $newSerial.');
+
+    final sanitized = newSerial.replaceAll('-', '');
+    if (!RegExp(r'^[0-9A-Fa-f]{8}\$').hasMatch(sanitized)) {
+      _logService.logError('Invalid serial format: \$newSerial');
+      throw FormatException(
+        'Invalid serial format. Use 8 hex digits, e.g., 1234-ABCD.',
+      );
     }
 
-    final sanitizedSerial = newSerial.replaceAll('-', '');
-    if (!RegExp(r'^[0-9A-Fa-f]{8}$').hasMatch(sanitizedSerial)) {
-      _logService
-          .logError('Invalid serial number format provided: $newSerial');
-      throw const FormatException(
-          'Invalid serial number format. Must be 8 hexadecimal characters (e.g., 1234-ABCD).');
+    final formatted = '\${sanitized.substring(0,4)}-\${sanitized.substring(4)}';
+
+    // Use Sysinternals volumeid.exe as there's no native Win32 API to set serial
+    final result = await Process.run(
+      'volumeid.exe',
+      [mountPath, formatted],
+      runInShell: true,
+    );
+    if (result.exitCode != 0) {
+      final stderr = result.stderr.toString();
+      _logService.logError('volumeid.exe failed: \$stderr');
+      throw Exception(
+        'Failed to change serial. Ensure volumeid.exe is in PATH and run as admin.',
+      );
     }
-    final formattedSerialForTool =
-        '${sanitizedSerial.substring(0, 4)}-${sanitizedSerial.substring(4)}';
 
-    try {
-      _logService.logInfo(
-          'Executing volumeid.exe with arguments: $mountPath, $formattedSerialForTool');
-      final result = await Process.run(
-          'volumeid.exe', [mountPath, formattedSerialForTool]);
-
-      if (result.exitCode != 0) {
-        final stdErr = result.stderr.toString();
-        String errorMessage =
-            'Failed to change serial number. Error: $stdErr\nMake sure the drive is not in use.';
-        if (stdErr.toLowerCase().contains('administrator') ||
-            stdErr.toLowerCase().contains('elevation')) {
-          errorMessage =
-              'Administrator privileges required. Please restart the application as an administrator.';
-        }
-        _logService.logError(
-            'volumeid.exe failed (exit code ${result.exitCode}): $errorMessage. StdOut: ${result.stdout}',
-            null,
-            StackTrace.current);
-        throw Exception(errorMessage);
-      }
-
-      _handleDeviceChange();
-      final successMessage =
-          'Serial change command sent successfully. Please replug the device for the change to take full effect. The new serial is $formattedSerialForTool.';
-      _logService.logUserActivity(
-          'Serial number for $mountPath successfully changed to $formattedSerialForTool.');
-      return successMessage;
-    } on ProcessException catch (e, st) {
-
-      if (e.errorCode == 2) {
-        _logService.logError('volumeid.exe tool not found.', e, st);
-        throw Exception(
-            '`volumeid.exe` tool not found. Please download it from Microsoft Sysinternals and place it in the application folder or a system PATH directory.');
-      }
-      _logService.logError('Error executing volumeid.exe', e, st);
-      throw Exception('Error executing volumeid.exe: $e');
-    } catch (e, st) {
-
-      _logService.logError(
-          'Unknown error during serial number change.', e, st);
-      rethrow;
-    }
+    // Refresh device list after change
+    await _refreshDevices();
+    _logService.logUserActivity(
+      'Serial for \$mountPath changed to \$formatted.');
+    return 'Serial changed to \$formatted. Replug device to apply.';
   }
 
   void dispose() {
+    _pollingTimer?.cancel();
+    if (!_controller.isClosed) _controller.close();
     _logService.logInfo('DeviceService disposed.');
-    if (!_controller.isClosed) {
-      _controller.close();
-    }
-    if (Platform.isWindows) {
-
-      DeviceManager().removeListener(_handleDeviceChange);
-    }
   }
 }

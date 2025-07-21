@@ -1,6 +1,14 @@
-class ConnectedDeviceInfo {
-  final String mountPath; // e.g., E:\
-  final String serialNumber; // In real app, the hardware serial. Here, it's also the mount path.
+// models/device_info.dart
 
-  ConnectedDeviceInfo({required this.mountPath, required this.serialNumber});
+class ConnectedDeviceInfo {
+  /// The root path of the drive, e.g. `E:\`
+  final String mountPath;
+
+  /// The volume serial number in the format `1234-ABCD`
+  final String serialNumber;
+
+  ConnectedDeviceInfo({
+    required this.mountPath,
+    required this.serialNumber,
+  });
 }
