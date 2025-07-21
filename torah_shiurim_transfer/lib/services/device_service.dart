@@ -23,8 +23,7 @@ class DeviceService {
 
   Future<void> _initializeWin32Listener() async {
     try {
-      // The window is created by window_manager. We need to wait for it to be findable.
-      // We'll try for a few seconds before giving up.
+      // מחכים עד שהחלון יופיע ויהיה ניתן לאתרו
       for (var i = 0; i < 10; i++) {
         await Future.delayed(const Duration(milliseconds: 500));
         final ptrTitle = 'העברת שיעורי תורה'.toNativeUtf16();
@@ -35,31 +34,38 @@ class DeviceService {
 
       if (_hwnd == 0) {
         _logService.logError(
-            'Could not find application window handle. Device change notifications will be disabled.',
-            null,
-            null);
+          'Could not find application window handle. Device change notifications will be disabled.',
+          null,
+          null,
+        );
         return;
       }
 
-      _logService.logInfo(
-          'Found window handle ($_hwnd). Subclassing for device change notifications.');
+      _logService.logInfo('Found window handle ($_hwnd). Subclassing for device change notifications.');
 
-      final newWndProc = Pointer.fromFunction<WNDPROC>(_wndProc, 0);
+      // שימו לב: טיפוס הנדרש הוא NativeFunction<WNDPROC>, לא רק WNDPROC
+      final newWndProc = Pointer.fromFunction<NativeFunction<WNDPROC>>(
+        _wndProc,
+        0,
+      );
 
-      _originalWndProc =
-          SetWindowLongPtr(_hwnd, GWLP_WNDPROC, newWndProc.address);
+      _originalWndProc = SetWindowLongPtr(
+        _hwnd,
+        GWLP_WNDPROC,
+        newWndProc.address,
+      );
       if (_originalWndProc == 0) {
         final error = GetLastError();
         _logService.logError(
-            'Failed to subclass window procedure. Error code: $error.',
-            null,
-            null);
+          'Failed to subclass window procedure. Error code: $error.',
+          null,
+          null,
+        );
       } else {
         _logService.logInfo('Successfully subclassed window procedure.');
       }
     } catch (e, st) {
-      _logService.logError(
-          'Error during Win32 listener initialization.', e, st);
+      _logService.logError('Error during Win32 listener initialization.', e, st);
     }
   }
 
