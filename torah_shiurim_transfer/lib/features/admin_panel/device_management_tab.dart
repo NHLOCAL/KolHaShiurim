@@ -263,7 +263,7 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
           _isEditingSerial = false;
         });
         _logService.logInfo(
-            'Device located successfully. MountPath: $_mountPath, Serial: ${_serialController.text}, SourcePath: $_sourcePathController.text');
+            'Device located successfully. MountPath: $_mountPath, Serial: ${_serialController.text}, SourcePath: ${_sourcePathController.text}');
       }
     } catch (e, st) {
       _logService.logError('Error during device location process.', e, st);
@@ -318,6 +318,18 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
 
   Future<void> _saveDevice() async {
     if (_formKey.currentState!.validate()) {
+      if (_mountPath == null) {
+        _logService.logWarning(
+            'Attempted to save device without a mount path. Please locate the device first.');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('יש לאתר את ההתקן לפני השמירה.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
       final serialNumber = _serialController.text;
       final companion = DevicesCompanion(
         serialNumber: drift.Value(serialNumber),
