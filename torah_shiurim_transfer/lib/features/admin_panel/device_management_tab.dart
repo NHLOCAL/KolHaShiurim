@@ -152,6 +152,7 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
         TextEditingController(text: widget.device?.sourcePath);
     _selectedUserId = widget.device?.userId;
     _isEditingSerial = widget.device == null;
+    _mountPath = widget.device?.mountPath;
 
     if (widget.device != null) {
       _findCurrentMountPath();
@@ -333,6 +334,7 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
       final serialNumber = _serialController.text;
       final companion = DevicesCompanion(
         serialNumber: drift.Value(serialNumber),
+        mountPath: drift.Value(_mountPath!),
         sourcePath: drift.Value(_sourcePathController.text),
         userId: drift.Value(_selectedUserId!),
       );

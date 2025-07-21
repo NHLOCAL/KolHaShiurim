@@ -259,6 +259,12 @@ class $DevicesTable extends Devices with TableInfo<$DevicesTable, Device> {
       type: DriftSqlType.string,
       requiredDuringInsert: true,
       defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'));
+  static const VerificationMeta _mountPathMeta =
+      const VerificationMeta('mountPath');
+  @override
+  late final GeneratedColumn<String> mountPath = GeneratedColumn<String>(
+      'mount_path', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
   static const VerificationMeta _sourcePathMeta =
       const VerificationMeta('sourcePath');
   @override
@@ -266,7 +272,8 @@ class $DevicesTable extends Devices with TableInfo<$DevicesTable, Device> {
       'source_path', aliasedName, false,
       type: DriftSqlType.string, requiredDuringInsert: true);
   @override
-  List<GeneratedColumn> get $columns => [id, userId, serialNumber, sourcePath];
+  List<GeneratedColumn> get $columns =>
+      [id, userId, serialNumber, mountPath, sourcePath];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -294,6 +301,12 @@ class $DevicesTable extends Devices with TableInfo<$DevicesTable, Device> {
     } else if (isInserting) {
       context.missing(_serialNumberMeta);
     }
+    if (data.containsKey('mount_path')) {
+      context.handle(_mountPathMeta,
+          mountPath.isAcceptableOrUnknown(data['mount_path']!, _mountPathMeta));
+    } else if (isInserting) {
+      context.missing(_mountPathMeta);
+    }
     if (data.containsKey('source_path')) {
       context.handle(
           _sourcePathMeta,
@@ -317,6 +330,8 @@ class $DevicesTable extends Devices with TableInfo<$DevicesTable, Device> {
           .read(DriftSqlType.int, data['${effectivePrefix}user_id'])!,
       serialNumber: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}serial_number'])!,
+      mountPath: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}mount_path'])!,
       sourcePath: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}source_path'])!,
     );
@@ -332,11 +347,13 @@ class Device extends DataClass implements Insertable<Device> {
   final int id;
   final int userId;
   final String serialNumber;
+  final String mountPath;
   final String sourcePath;
   const Device(
       {required this.id,
       required this.userId,
       required this.serialNumber,
+      required this.mountPath,
       required this.sourcePath});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -344,6 +361,7 @@ class Device extends DataClass implements Insertable<Device> {
     map['id'] = Variable<int>(id);
     map['user_id'] = Variable<int>(userId);
     map['serial_number'] = Variable<String>(serialNumber);
+    map['mount_path'] = Variable<String>(mountPath);
     map['source_path'] = Variable<String>(sourcePath);
     return map;
   }
@@ -353,6 +371,7 @@ class Device extends DataClass implements Insertable<Device> {
       id: Value(id),
       userId: Value(userId),
       serialNumber: Value(serialNumber),
+      mountPath: Value(mountPath),
       sourcePath: Value(sourcePath),
     );
   }
@@ -364,6 +383,7 @@ class Device extends DataClass implements Insertable<Device> {
       id: serializer.fromJson<int>(json['id']),
       userId: serializer.fromJson<int>(json['userId']),
       serialNumber: serializer.fromJson<String>(json['serialNumber']),
+      mountPath: serializer.fromJson<String>(json['mountPath']),
       sourcePath: serializer.fromJson<String>(json['sourcePath']),
     );
   }
@@ -374,16 +394,22 @@ class Device extends DataClass implements Insertable<Device> {
       'id': serializer.toJson<int>(id),
       'userId': serializer.toJson<int>(userId),
       'serialNumber': serializer.toJson<String>(serialNumber),
+      'mountPath': serializer.toJson<String>(mountPath),
       'sourcePath': serializer.toJson<String>(sourcePath),
     };
   }
 
   Device copyWith(
-          {int? id, int? userId, String? serialNumber, String? sourcePath}) =>
+          {int? id,
+          int? userId,
+          String? serialNumber,
+          String? mountPath,
+          String? sourcePath}) =>
       Device(
         id: id ?? this.id,
         userId: userId ?? this.userId,
         serialNumber: serialNumber ?? this.serialNumber,
+        mountPath: mountPath ?? this.mountPath,
         sourcePath: sourcePath ?? this.sourcePath,
       );
   Device copyWithCompanion(DevicesCompanion data) {
@@ -393,6 +419,7 @@ class Device extends DataClass implements Insertable<Device> {
       serialNumber: data.serialNumber.present
           ? data.serialNumber.value
           : this.serialNumber,
+      mountPath: data.mountPath.present ? data.mountPath.value : this.mountPath,
       sourcePath:
           data.sourcePath.present ? data.sourcePath.value : this.sourcePath,
     );
@@ -404,13 +431,15 @@ class Device extends DataClass implements Insertable<Device> {
           ..write('id: $id, ')
           ..write('userId: $userId, ')
           ..write('serialNumber: $serialNumber, ')
+          ..write('mountPath: $mountPath, ')
           ..write('sourcePath: $sourcePath')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, userId, serialNumber, sourcePath);
+  int get hashCode =>
+      Object.hash(id, userId, serialNumber, mountPath, sourcePath);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -418,6 +447,7 @@ class Device extends DataClass implements Insertable<Device> {
           other.id == this.id &&
           other.userId == this.userId &&
           other.serialNumber == this.serialNumber &&
+          other.mountPath == this.mountPath &&
           other.sourcePath == this.sourcePath);
 }
 
@@ -425,31 +455,37 @@ class DevicesCompanion extends UpdateCompanion<Device> {
   final Value<int> id;
   final Value<int> userId;
   final Value<String> serialNumber;
+  final Value<String> mountPath;
   final Value<String> sourcePath;
   const DevicesCompanion({
     this.id = const Value.absent(),
     this.userId = const Value.absent(),
     this.serialNumber = const Value.absent(),
+    this.mountPath = const Value.absent(),
     this.sourcePath = const Value.absent(),
   });
   DevicesCompanion.insert({
     this.id = const Value.absent(),
     required int userId,
     required String serialNumber,
+    required String mountPath,
     required String sourcePath,
   })  : userId = Value(userId),
         serialNumber = Value(serialNumber),
+        mountPath = Value(mountPath),
         sourcePath = Value(sourcePath);
   static Insertable<Device> custom({
     Expression<int>? id,
     Expression<int>? userId,
     Expression<String>? serialNumber,
+    Expression<String>? mountPath,
     Expression<String>? sourcePath,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (userId != null) 'user_id': userId,
       if (serialNumber != null) 'serial_number': serialNumber,
+      if (mountPath != null) 'mount_path': mountPath,
       if (sourcePath != null) 'source_path': sourcePath,
     });
   }
@@ -458,11 +494,13 @@ class DevicesCompanion extends UpdateCompanion<Device> {
       {Value<int>? id,
       Value<int>? userId,
       Value<String>? serialNumber,
+      Value<String>? mountPath,
       Value<String>? sourcePath}) {
     return DevicesCompanion(
       id: id ?? this.id,
       userId: userId ?? this.userId,
       serialNumber: serialNumber ?? this.serialNumber,
+      mountPath: mountPath ?? this.mountPath,
       sourcePath: sourcePath ?? this.sourcePath,
     );
   }
@@ -479,6 +517,9 @@ class DevicesCompanion extends UpdateCompanion<Device> {
     if (serialNumber.present) {
       map['serial_number'] = Variable<String>(serialNumber.value);
     }
+    if (mountPath.present) {
+      map['mount_path'] = Variable<String>(mountPath.value);
+    }
     if (sourcePath.present) {
       map['source_path'] = Variable<String>(sourcePath.value);
     }
@@ -491,6 +532,7 @@ class DevicesCompanion extends UpdateCompanion<Device> {
           ..write('id: $id, ')
           ..write('userId: $userId, ')
           ..write('serialNumber: $serialNumber, ')
+          ..write('mountPath: $mountPath, ')
           ..write('sourcePath: $sourcePath')
           ..write(')'))
         .toString();
@@ -1885,12 +1927,14 @@ typedef $$DevicesTableCreateCompanionBuilder = DevicesCompanion Function({
   Value<int> id,
   required int userId,
   required String serialNumber,
+  required String mountPath,
   required String sourcePath,
 });
 typedef $$DevicesTableUpdateCompanionBuilder = DevicesCompanion Function({
   Value<int> id,
   Value<int> userId,
   Value<String> serialNumber,
+  Value<String> mountPath,
   Value<String> sourcePath,
 });
 
@@ -1927,6 +1971,9 @@ class $$DevicesTableFilterComposer
 
   ColumnFilters<String> get serialNumber => $composableBuilder(
       column: $table.serialNumber, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get mountPath => $composableBuilder(
+      column: $table.mountPath, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get sourcePath => $composableBuilder(
       column: $table.sourcePath, builder: (column) => ColumnFilters(column));
@@ -1968,6 +2015,9 @@ class $$DevicesTableOrderingComposer
       column: $table.serialNumber,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get mountPath => $composableBuilder(
+      column: $table.mountPath, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get sourcePath => $composableBuilder(
       column: $table.sourcePath, builder: (column) => ColumnOrderings(column));
 
@@ -2006,6 +2056,9 @@ class $$DevicesTableAnnotationComposer
 
   GeneratedColumn<String> get serialNumber => $composableBuilder(
       column: $table.serialNumber, builder: (column) => column);
+
+  GeneratedColumn<String> get mountPath =>
+      $composableBuilder(column: $table.mountPath, builder: (column) => column);
 
   GeneratedColumn<String> get sourcePath => $composableBuilder(
       column: $table.sourcePath, builder: (column) => column);
@@ -2057,24 +2110,28 @@ class $$DevicesTableTableManager extends RootTableManager<
             Value<int> id = const Value.absent(),
             Value<int> userId = const Value.absent(),
             Value<String> serialNumber = const Value.absent(),
+            Value<String> mountPath = const Value.absent(),
             Value<String> sourcePath = const Value.absent(),
           }) =>
               DevicesCompanion(
             id: id,
             userId: userId,
             serialNumber: serialNumber,
+            mountPath: mountPath,
             sourcePath: sourcePath,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
             required int userId,
             required String serialNumber,
+            required String mountPath,
             required String sourcePath,
           }) =>
               DevicesCompanion.insert(
             id: id,
             userId: userId,
             serialNumber: serialNumber,
+            mountPath: mountPath,
             sourcePath: sourcePath,
           ),
           withReferenceMapper: (p0) => p0

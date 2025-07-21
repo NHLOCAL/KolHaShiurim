@@ -13,6 +13,7 @@ class Devices extends Table {
 
   TextColumn get serialNumber => text().unique()();
 
+  TextColumn get mountPath => text()();
   TextColumn get sourcePath => text()();
 }
 
