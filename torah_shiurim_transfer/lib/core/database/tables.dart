@@ -10,8 +10,9 @@ class Users extends Table {
 class Devices extends Table {
   IntColumn get id => integer().autoIncrement()();
   IntColumn get userId => integer().references(Users, #id)();
+
   TextColumn get serialNumber => text().unique()();
-  TextColumn get mountPath => text()(); // הוספת העמודה החסרה
+
   TextColumn get sourcePath => text()();
 }
 
