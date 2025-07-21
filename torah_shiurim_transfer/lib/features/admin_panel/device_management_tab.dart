@@ -171,7 +171,7 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
         'Attempting to find current mount path for device serial: ${widget.device!.serialNumber}');
     try {
       final devices = await ref.read(connectedDevicesProvider.future);
-      final connectedDevice = devices.firstWhere(
+      final ConnectedDeviceInfo connectedDevice = devices.firstWhere(
         (d) => d.serialNumber == widget.device!.serialNumber,
       );
       if (mounted) {

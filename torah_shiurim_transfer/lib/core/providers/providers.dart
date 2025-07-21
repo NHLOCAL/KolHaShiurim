@@ -60,7 +60,7 @@ class AuthStateNotifier extends StateNotifier<AppUserState> {
       connectedDevicesProvider,
       (_, asyncValue) {
         asyncValue.when(
-          data: (devices) async {
+          data: (List<ConnectedDeviceInfo> devices) async {
             _logService.logInfo(
               'Connected devices: ${devices.map((d) => d.serialNumber).join(', ')}'
             );

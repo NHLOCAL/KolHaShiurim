@@ -43,6 +43,9 @@ class DeviceService {
         final letter = String.fromCharCode(65 + i);
         final mountPath = '$letter:\\';
 
+        final driveType = GetDriveType(mountPath.toNativeUtf16());
+        if (driveType != DRIVE_REMOVABLE) continue;
+
         final lpRootPathName = mountPath.toNativeUtf16();
         final pVolumeNameBuffer = calloc<Uint16>(MAX_PATH);
         final pSerialNumber = calloc<Uint32>();
@@ -50,7 +53,7 @@ class DeviceService {
         final pFileSystemFlags = calloc<Uint32>();
         final pFileSystemNameBuffer = calloc<Uint16>(MAX_PATH);
 
-        final success = GetVolumeInformationW(
+        final success = GetVolumeInformation(
           lpRootPathName,
           pVolumeNameBuffer,
           MAX_PATH,
@@ -106,14 +109,21 @@ class DeviceService {
       'Changing serial for $mountPath to $newSerial.');
 
     final sanitized = newSerial.replaceAll('-', '');
-    if (!RegExp(r'^[0-9A-Fa-f]{8}\$').hasMatch(sanitized)) {
-      _logService.logError('Invalid serial format: \$newSerial');
+    if (!RegExp(r'^[0-9A-Fa-f]{8}
+
+  void dispose() {
+    _pollingTimer?.cancel();
+    if (!_controller.isClosed) _controller.close();
+    _logService.logInfo('DeviceService disposed.');
+  }
+}).hasMatch(sanitized)) {
+      _logService.logError('Invalid serial format: $newSerial');
       throw FormatException(
         'Invalid serial format. Use 8 hex digits, e.g., 1234-ABCD.',
       );
     }
 
-    final formatted = '\${sanitized.substring(0,4)}-\${sanitized.substring(4)}';
+    final formatted = '${sanitized.substring(0,4)}-${sanitized.substring(4)}';
 
     // Use Sysinternals volumeid.exe as there's no native Win32 API to set serial
     final result = await Process.run(
@@ -123,7 +133,7 @@ class DeviceService {
     );
     if (result.exitCode != 0) {
       final stderr = result.stderr.toString();
-      _logService.logError('volumeid.exe failed: \$stderr');
+      _logService.logError('volumeid.exe failed: $stderr');
       throw Exception(
         'Failed to change serial. Ensure volumeid.exe is in PATH and run as admin.',
       );
@@ -132,8 +142,8 @@ class DeviceService {
     // Refresh device list after change
     await _refreshDevices();
     _logService.logUserActivity(
-      'Serial for \$mountPath changed to \$formatted.');
-    return 'Serial changed to \$formatted. Replug device to apply.';
+      'Serial for $mountPath changed to $formatted.');
+    return 'Serial changed to $formatted. Replug device to apply.';
   }
 
   void dispose() {
