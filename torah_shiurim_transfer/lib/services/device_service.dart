@@ -35,23 +35,31 @@ class DeviceService {
         final letter = String.fromCharCode(65 + i);
         final root = '$letter:\\';
 
-        if (GetDriveType(root.toNativeUtf16()) != DRIVE_REMOVABLE) continue;
+        // toNativeUtf16() כבר מחזיר Pointer<Utf16>
+        final rootPtr = root.toNativeUtf16();
+        if (GetDriveType(rootPtr) != DRIVE_REMOVABLE) {
+          calloc.free(rootPtr);
+          continue;
+        }
 
-        final lpRootPathName = root.toNativeUtf16();
-        final pVolumeNameBuffer    = calloc<Uint16>(MAX_PATH).cast<Utf16>();
-        final pSerialNumber        = calloc<Uint32>();
-        final pMaxComponentLen     = calloc<Uint32>();
-        final pFileSystemFlags     = calloc<Uint32>();
-        final pFileSystemNameBuffer= calloc<Uint16>(MAX_PATH).cast<Utf16>();
+        // הקצאה כ־Uint16 ואז המרה ל־Utf16
+        final volNameBufNative = calloc<Uint16>(MAX_PATH);
+        final volNameBuf = volNameBufNative.cast<Utf16>();
+        final fsNameBufNative = calloc<Uint16>(MAX_PATH);
+        final fsNameBuf = fsNameBufNative.cast<Utf16>();
+
+        final pSerialNumber    = calloc<Uint32>();
+        final pMaxComponentLen = calloc<Uint32>();
+        final pFileSystemFlags = calloc<Uint32>();
 
         final success = GetVolumeInformation(
-          lpRootPathName,
-          pVolumeNameBuffer,
+          rootPtr,
+          volNameBuf,
           MAX_PATH,
           pSerialNumber,
           pMaxComponentLen,
           pFileSystemFlags,
-          pFileSystemNameBuffer,
+          fsNameBuf,
           MAX_PATH,
         );
 
@@ -61,15 +69,19 @@ class DeviceService {
               .toUpperCase()
               .padLeft(8, '0');
           final formatted  = '${serialHex.substring(0,4)}-${serialHex.substring(4)}';
-          devices.add(ConnectedDeviceInfo(mountPath: root, serialNumber: formatted));
+          devices.add(ConnectedDeviceInfo(
+            mountPath: root,
+            serialNumber: formatted,
+          ));
         }
 
-        free(lpRootPathName);
-        free(pVolumeNameBuffer);
-        free(pSerialNumber);
-        free(pMaxComponentLen);
-        free(pFileSystemFlags);
-        free(pFileSystemNameBuffer);
+        // שיחרור כל הזיכרון שהוקצה
+        calloc.free(rootPtr);
+        calloc.free(volNameBufNative);
+        calloc.free(fsNameBufNative);
+        calloc.free(pSerialNumber);
+        calloc.free(pMaxComponentLen);
+        calloc.free(pFileSystemFlags);
       }
 
       _controller.add(devices);
@@ -96,7 +108,11 @@ class DeviceService {
     }
 
     final formatted = '${s.substring(0,4)}-${s.substring(4)}';
-    final result = await Process.run('volumeid.exe', [mount, formatted], runInShell: true);
+    final result = await Process.run(
+      'volumeid.exe',
+      [mount, formatted],
+      runInShell: true,
+    );
 
     if (result.exitCode != 0) {
       _logService.logError('volumeid.exe failed: ${result.stderr}');
