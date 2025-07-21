@@ -9,20 +9,76 @@ import 'package:torah_shiurim_transfer/services/log_service.dart';
 class DeviceService {
   final _controller = StreamController<List<ConnectedDeviceInfo>>.broadcast();
   final LogService _logService;
-  Timer? _pollingTimer;
+
+  static int _hwnd = 0;
+  static int _originalWndProc = 0;
+  static void Function()? _refreshDevicesCallback;
 
   DeviceService(this._logService) {
-    _logService.logInfo('DeviceService initialized.');
-    _startPollingDrives();
+    _logService.logInfo('DeviceService initialized for event-driven detection.');
+    _refreshDevicesCallback = _refreshDevices;
+    _initializeWin32Listener(); // Set up the system event listener
+    _refreshDevices(); // Perform an initial scan on startup
+  }
+
+  Future<void> _initializeWin32Listener() async {
+    try {
+      // The window is created by window_manager. We need to wait for it to be findable.
+      // We'll try for a few seconds before giving up.
+      for (var i = 0; i < 10; i++) {
+        await Future.delayed(const Duration(milliseconds: 500));
+        final ptrTitle = 'העברת שיעורי תורה'.toNativeUtf16();
+        _hwnd = FindWindow(nullptr, ptrTitle);
+        calloc.free(ptrTitle);
+        if (_hwnd != 0) break;
+      }
+
+      if (_hwnd == 0) {
+        _logService.logError(
+            'Could not find application window handle. Device change notifications will be disabled.',
+            null,
+            null);
+        return;
+      }
+
+      _logService.logInfo(
+          'Found window handle ($_hwnd). Subclassing for device change notifications.');
+
+      final newWndProc = Pointer.fromFunction<WNDPROC>(_wndProc, 0);
+
+      _originalWndProc =
+          SetWindowLongPtr(_hwnd, GWLP_WNDPROC, newWndProc.address);
+      if (_originalWndProc == 0) {
+        final error = GetLastError();
+        _logService.logError(
+            'Failed to subclass window procedure. Error code: $error.',
+            null,
+            null);
+      } else {
+        _logService.logInfo('Successfully subclassed window procedure.');
+      }
+    } catch (e, st) {
+      _logService.logError(
+          'Error during Win32 listener initialization.', e, st);
+    }
+  }
+
+  static int _wndProc(int hwnd, int uMsg, int wParam, int lParam) {
+    if (uMsg == WM_DEVICECHANGE) {
+      const dbtDeviceArrival = 0x8000;
+      const dbtDeviceRemoveComplete = 0x8004;
+
+      if (wParam == dbtDeviceArrival || wParam == dbtDeviceRemoveComplete) {
+        // A device was added or removed. Schedule a refresh to avoid blocking the message loop.
+        Future(() => _refreshDevicesCallback?.call());
+      }
+    }
+    // Always call the original window procedure for other messages
+    return CallWindowProc(_originalWndProc, hwnd, uMsg, wParam, lParam);
   }
 
   Stream<List<ConnectedDeviceInfo>> watchConnectedDevices() =>
       _controller.stream.distinct((a, b) => _areEqual(a, b));
-
-  void _startPollingDrives({Duration interval = const Duration(seconds: 5)}) {
-    _refreshDevices();
-    _pollingTimer = Timer.periodic(interval, (_) => _refreshDevices());
-  }
 
   Future<void> _refreshDevices() async {
     _logService.logInfo('Refreshing connected volumes via Win32 API.');
@@ -35,20 +91,18 @@ class DeviceService {
         final letter = String.fromCharCode(65 + i);
         final root = '$letter:\\';
 
-        // toNativeUtf16() כבר מחזיר Pointer<Utf16>
         final rootPtr = root.toNativeUtf16();
         if (GetDriveType(rootPtr) != DRIVE_REMOVABLE) {
           calloc.free(rootPtr);
           continue;
         }
 
-        // הקצאה כ־Uint16 ואז המרה ל־Utf16
         final volNameBufNative = calloc<Uint16>(MAX_PATH);
         final volNameBuf = volNameBufNative.cast<Utf16>();
         final fsNameBufNative = calloc<Uint16>(MAX_PATH);
         final fsNameBuf = fsNameBufNative.cast<Utf16>();
 
-        final pSerialNumber    = calloc<Uint32>();
+        final pSerialNumber = calloc<Uint32>();
         final pMaxComponentLen = calloc<Uint32>();
         final pFileSystemFlags = calloc<Uint32>();
 
@@ -64,18 +118,16 @@ class DeviceService {
         );
 
         if (success != 0) {
-          final serialHex = pSerialNumber.value
-              .toRadixString(16)
-              .toUpperCase()
-              .padLeft(8, '0');
-          final formatted  = '${serialHex.substring(0,4)}-${serialHex.substring(4)}';
+          final serialHex =
+              pSerialNumber.value.toRadixString(16).toUpperCase().padLeft(8, '0');
+          final formatted =
+              '${serialHex.substring(0, 4)}-${serialHex.substring(4)}';
           devices.add(ConnectedDeviceInfo(
             mountPath: root,
             serialNumber: formatted,
           ));
         }
 
-        // שיחרור כל הזיכרון שהוקצה
         calloc.free(rootPtr);
         calloc.free(volNameBufNative);
         calloc.free(fsNameBufNative);
@@ -107,7 +159,7 @@ class DeviceService {
       throw FormatException('Use 8 hex digits, e.g. 1234ABCD.');
     }
 
-    final formatted = '${s.substring(0,4)}-${s.substring(4)}';
+    final formatted = '${s.substring(0, 4)}-${s.substring(4)}';
     final result = await Process.run(
       'volumeid.exe',
       [mount, formatted],
@@ -125,7 +177,10 @@ class DeviceService {
   }
 
   void dispose() {
-    _pollingTimer?.cancel();
+    if (_originalWndProc != 0 && _hwnd != 0) {
+      SetWindowLongPtr(_hwnd, GWLP_WNDPROC, _originalWndProc);
+      _logService.logInfo('Restored original window procedure.');
+    }
     if (!_controller.isClosed) _controller.close();
     _logService.logInfo('DeviceService disposed.');
   }
