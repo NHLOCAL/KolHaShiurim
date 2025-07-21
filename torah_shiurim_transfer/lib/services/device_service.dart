@@ -8,7 +8,7 @@ import 'package:torah_shiurim_transfer/services/log_service.dart';
 
 class DeviceService {
   final StreamController<List<ConnectedDeviceInfo>> _controller =
-      StreamController.broadcast();
+      StreamController<List<ConnectedDeviceInfo>>.broadcast();
   final LogService _logService;
   Timer? _pollingTimer;
 
@@ -26,7 +26,7 @@ class DeviceService {
   void _startPollingDrives({Duration interval = const Duration(seconds: 5)}) {
     // Initial load
     _refreshDevices();
-    // Set up periodic polling
+    // Periodic polling
     _pollingTimer = Timer.periodic(interval, (_) {
       _refreshDevices();
     });
@@ -43,10 +43,9 @@ class DeviceService {
         final letter = String.fromCharCode(65 + i);
         final mountPath = '$letter:\\';
 
-        final driveType = GetDriveType(mountPath.toNativeUtf16());
+        final driveType = GetDriveType(TEXT(mountPath));
         if (driveType != DRIVE_REMOVABLE) continue;
 
-        final lpRootPathName = mountPath.toNativeUtf16();
         final pVolumeNameBuffer = calloc<Uint16>(MAX_PATH);
         final pSerialNumber = calloc<Uint32>();
         final pMaxComponentLen = calloc<Uint32>();
@@ -54,7 +53,7 @@ class DeviceService {
         final pFileSystemNameBuffer = calloc<Uint16>(MAX_PATH);
 
         final success = GetVolumeInformation(
-          lpRootPathName,
+          TEXT(mountPath),
           pVolumeNameBuffer,
           MAX_PATH,
           pSerialNumber,
@@ -65,8 +64,12 @@ class DeviceService {
         );
 
         if (success != 0) {
-          final serialHex = pSerialNumber.value.toRadixString(16).toUpperCase().padLeft(8, '0');
-          final formattedSerial = '${serialHex.substring(0, 4)}-${serialHex.substring(4)}';
+          final serialHex = pSerialNumber.value
+              .toRadixString(16)
+              .toUpperCase()
+              .padLeft(8, '0');
+          final formattedSerial =
+              '${serialHex.substring(0, 4)}-${serialHex.substring(4)}';
           devices.add(
             ConnectedDeviceInfo(
               mountPath: mountPath,
@@ -76,7 +79,6 @@ class DeviceService {
         }
 
         // Free allocated memory
-        free(lpRootPathName);
         free(pVolumeNameBuffer);
         free(pSerialNumber);
         free(pMaxComponentLen);
@@ -85,7 +87,8 @@ class DeviceService {
       }
 
       _controller.add(devices);
-      _logService.logInfo('Detected ${devices.length} volumes via Win32 API.');
+      _logService.logInfo(
+          'Detected ${devices.length} removable volumes via Win32 API.');
     } catch (e, st) {
       _logService.logError('Error enumerating drives', e, st);
     }
@@ -101,31 +104,26 @@ class DeviceService {
     return aSet.containsAll(bSet) && bSet.containsAll(aSet);
   }
 
+  /// משנה את מספר הסידורי של דיסק באמצעות כלי חיצוני (volumeid.exe)
   Future<String> changeVolumeSerialNumber(
     String mountPath,
     String newSerial,
   ) async {
     _logService.logUserActivity(
-      'Changing serial for $mountPath to $newSerial.');
+      'Changing serial for $mountPath to $newSerial.',
+    );
 
     final sanitized = newSerial.replaceAll('-', '');
-    if (!RegExp(r'^[0-9A-Fa-f]{8}
-
-  void dispose() {
-    _pollingTimer?.cancel();
-    if (!_controller.isClosed) _controller.close();
-    _logService.logInfo('DeviceService disposed.');
-  }
-}).hasMatch(sanitized)) {
+    if (!RegExp(r'^[0-9A-Fa-f]{8}$').hasMatch(sanitized)) {
       _logService.logError('Invalid serial format: $newSerial');
       throw FormatException(
-        'Invalid serial format. Use 8 hex digits, e.g., 1234-ABCD.',
+        'Invalid serial format. Use 8 hex digits, e.g., 1234ABCD.',
       );
     }
 
-    final formatted = '${sanitized.substring(0,4)}-${sanitized.substring(4)}';
+    final formatted = '${sanitized.substring(0, 4)}-${sanitized.substring(4)}';
 
-    // Use Sysinternals volumeid.exe as there's no native Win32 API to set serial
+    // יש להשתמש ב־volumeid.exe של Sysinternals כדי לשנות את הסידורי
     final result = await Process.run(
       'volumeid.exe',
       [mountPath, formatted],
@@ -139,11 +137,12 @@ class DeviceService {
       );
     }
 
-    // Refresh device list after change
+    // ריענון הרשימה לאחר השינוי
     await _refreshDevices();
     _logService.logUserActivity(
-      'Serial for $mountPath changed to $formatted.');
-    return 'Serial changed to $formatted. Replug device to apply.';
+      'Serial for $mountPath changed to $formatted.',
+    );
+    return 'Serial changed to $formatted. Please replug the device to apply.';
   }
 
   void dispose() {
