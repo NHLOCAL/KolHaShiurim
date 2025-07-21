@@ -2,19 +2,20 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:go_router/go_router.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:torah_shiurim_transfer/core/license/license_manager.dart';
+import 'package:torah_shiurim_transfer/core/providers/providers.dart';
 
-class LicenseScreen extends StatefulWidget {
+class LicenseScreen extends ConsumerStatefulWidget {
   final LicenseManager licenseManager;
   const LicenseScreen({required this.licenseManager, Key? key})
       : super(key: key);
 
   @override
-  State<LicenseScreen> createState() => _LicenseScreenState();
+  ConsumerState<LicenseScreen> createState() => _LicenseScreenState();
 }
 
-class _LicenseScreenState extends State<LicenseScreen> {
+class _LicenseScreenState extends ConsumerState<LicenseScreen> {
   final _controller = TextEditingController();
   String? _statusMessage;
   bool _isLoading = false;
@@ -75,13 +76,17 @@ class _LicenseScreenState extends State<LicenseScreen> {
       _isLoading = true;
       _statusMessage = 'מאמת רישיון...';
     });
-    final valid =
-        await widget.licenseManager.verifyAndSaveLicense(_controller.text);
+
+    // Get the log service from the provider
+    final logService = ref.read(logServiceProvider);
+
+    // Pass the log service to the verification function
+    final valid = await widget.licenseManager
+        .verifyAndSaveLicense(_controller.text, logService);
 
     if (mounted) {
       if (valid) {
-        // Upon successful verification, navigate to the main app screen
-        context.go('/admin');
+        ref.invalidate(licenseStatusProvider);
       } else {
         setState(() {
           _statusMessage = 'הרישיון אינו תקף או שפג תוקפו.';

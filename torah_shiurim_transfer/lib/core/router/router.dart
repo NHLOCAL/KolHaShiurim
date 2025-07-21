@@ -5,14 +5,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:torah_shiurim_transfer/core/providers/providers.dart';
 import 'package:torah_shiurim_transfer/features/admin_panel/screens/admin_panel_screen.dart';
-import 'package:torah_shiurim_transfer/features/licensing/screens/license_screen.dart'; // Import חדש
+import 'package:torah_shiurim_transfer/features/licensing/screens/license_screen.dart';
 import 'package:torah_shiurim_transfer/features/user_panel/screens/user_transfer_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
+  // Watch all dependencies at the top level
   final authState = ref.watch(authStateProvider);
+  final licenseStatus = ref.watch(licenseStatusProvider);
 
+  // The refresh listenable needs to react to both auth and license changes.
+  // We can achieve this by creating a custom stream or simply by letting
+  // the provider re-creation handle it, which it does.
   final refreshListenable =
-      GoRouterRefreshStream(ref.read(authStateProvider.notifier).stream);
+      GoRouterRefreshStream(ref.watch(authStateProvider.notifier).stream);
   ref.onDispose(refreshListenable.dispose);
 
   return GoRouter(
@@ -22,7 +27,6 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/license',
         builder: (context, state) {
-          // נטען את ה-provider באופן אסינכרוני ונציג מסך טעינה
           final licenseManagerAsync = ref.watch(licenseManagerProvider);
           return licenseManagerAsync.when(
             data: (manager) => LicenseScreen(licenseManager: manager),
@@ -43,23 +47,28 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const AdminPanelScreen(),
       ),
     ],
-    redirect: (context, state) async {
-      // --- License Check Block START ---
-      final licenseManager = await ref.read(licenseManagerProvider.future);
-      final isLicensed = await licenseManager.hasValidLicense();
+    redirect: (context, state) {
+      // The redirect function is now synchronous and safe.
       final isOnLicenseScreen = state.uri.path == '/license';
 
+      // While license status is being determined, don't redirect.
+      // This prevents flickering between screens on startup.
+      if (licenseStatus.isLoading) {
+        return null;
+      }
+
+      final isLicensed = licenseStatus.valueOrNull ?? false;
+
       if (!isLicensed) {
-        return isOnLicenseScreen
-            ? null
-            : '/license'; // אם אין רישיון, כפה מעבר למסך הרישוי
+        return isOnLicenseScreen ? null : '/license';
       }
 
+      // If license is valid and we are on the license screen, redirect away.
       if (isLicensed && isOnLicenseScreen) {
-        return '/admin'; // אם יש רישיון ונמצאים במסך רישוי, עבור למסך הראשי
+        return '/admin';
       }
-      // --- License Check Block END ---
 
+      // Standard authentication-based redirects
       final currentLocation = state.uri.path;
 
       if (authState.isLoggedOut && currentLocation != '/admin') {

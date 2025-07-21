@@ -1,13 +1,15 @@
 import 'dart:convert';
 import 'dart:ffi';
-import 'dart:io'; // ← make sure this is here
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
+import 'package:canonical_json/canonical_json.dart' as cj;
 import 'package:basic_utils/basic_utils.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:pointycastle/export.dart';
+import 'package:torah_shiurim_transfer/services/log_service.dart';
 import 'package:win32/win32.dart';
 import 'package:windows_system_info/windows_system_info.dart';
 
@@ -37,16 +39,13 @@ class LicenseManager {
     return File(p.join(appDir.path, 'app.lic'));
   }
 
-  /// Combines CPU ID, disk serial & MAC, then SHA‑256 → Base64Url.
   Future<String> getHardwareFingerprint() async {
-    // 1) CPU info
     final sysInfo = calloc<SYSTEM_INFO>();
     GetSystemInfo(sysInfo);
     final cpuId =
         '${sysInfo.ref.wProcessorArchitecture}-${sysInfo.ref.dwNumberOfProcessors}-${sysInfo.ref.dwProcessorType}';
     calloc.free(sysInfo);
 
-    // 2) Disk serial
     final volName = calloc<Uint16>(MAX_PATH).cast<Utf16>();
     final fsName = calloc<Uint16>(MAX_PATH).cast<Utf16>();
     final serialPtr = calloc<DWORD>();
@@ -60,33 +59,39 @@ class LicenseManager {
     calloc.free(fsName);
     calloc.free(serialPtr);
 
-    // 3) MAC address via WindowsSystemInfo
     String macAddress = '';
     await WindowsSystemInfo.initWindowsInfo(
       requiredValues: [WindowsSystemInfoFeat.network],
     );
     final adapters = WindowsSystemInfo.network;
     for (final adapter in adapters) {
-      final mac = adapter.mac; // ← use `.mac`
+      final mac = adapter.mac;
       if (mac.isNotEmpty) {
         macAddress = mac;
         break;
       }
     }
 
-    // Combine and hash
     final concat = 'cpu:$cpuId;disk:$diskSerial;mac:$macAddress';
     final hash =
         SHA256Digest().process(Uint8List.fromList(utf8.encode(concat)));
     return base64Url.encode(hash);
   }
 
-  Future<bool> verifyLicense(String licenseJson) async {
+  Future<bool> verifyLicense(String licenseJson, LogService logService) async {
+    await logService.logInfo("--- Starting License Verification ---");
     try {
+      // 1. Parse JSON
       final jsonMap = json.decode(licenseJson) as Map<String, dynamic>;
-      final signature = base64.decode(jsonMap['signature'] as String);
+      await logService.logInfo("Step 1: License JSON parsed successfully.");
 
-      // Rebuild payload
+      // 2. Decode signature (URL‑safe Base64)
+      final sigB64 = jsonMap['signature'] as String;
+      final signatureBytes = base64Url.decode(sigB64);
+      await logService.logInfo(
+          "Step 2: Signature decoded. Length: ${signatureBytes.length} bytes.");
+
+      // 3. Build canonical payload map
       final payloadMap = {
         'fingerprint': jsonMap['fingerprint'],
         'issued_to': jsonMap['issued_to'],
@@ -94,27 +99,57 @@ class LicenseManager {
         'valid_until': jsonMap['valid_until'],
         'features': jsonMap['features'],
       };
-      final payload = utf8.encode(json.encode(payloadMap));
 
-      // RSA‑SHA256 verify
-      final signer = RSASigner(SHA256Digest(), '0609608648016503040201');
-      signer.init(false, PublicKeyParameter<RSAPublicKey>(publicKey));
-      if (!signer.verifySignature(
-          Uint8List.fromList(payload), RSASignature(signature))) {
+      final payloadBytes = cj.canonicalJson.encode(payloadMap);
+      final payloadString = utf8.decode(payloadBytes);
+
+      await logService.logInfo("--- CRITICAL PAYLOAD CHECK ---");
+      await logService.logInfo("Payload for verification:");
+      await logService.logInfo(payloadString);
+      await logService.logInfo("--- END CRITICAL PAYLOAD CHECK ---");
+
+      // 5. Verify signature
+      final verifier = RSASigner(SHA256Digest(), '0609608648016503040201');
+      verifier.init(false, PublicKeyParameter<RSAPublicKey>(publicKey));
+      final payloadBytesUint8 = Uint8List.fromList(payloadBytes);
+      final isValid = verifier.verifySignature(
+          payloadBytesUint8, RSASignature(signatureBytes));
+      await logService
+          .logInfo("Step 3: Signature verification result: $isValid");
+
+      if (!isValid) {
+        await logService.logWarning("Verification FAILED: Invalid signature.");
         return false;
       }
 
-      // Date checks
+      // 6. Date validity
       final now = DateTime.now();
-      if (now.isBefore(DateTime.parse(jsonMap['issued_on'])) ||
-          now.isAfter(DateTime.parse(jsonMap['valid_until']))) {
+      final issuedOn = DateTime.parse(jsonMap['issued_on']);
+      final validUntil = DateTime.parse(jsonMap['valid_until']);
+      await logService.logInfo(
+          "Step 4: Now=$now, IssuedOn=$issuedOn, ValidUntil=$validUntil");
+      if (now.isBefore(issuedOn) || now.isAfter(validUntil)) {
+        await logService.logWarning("Verification FAILED: License not active.");
         return false;
       }
 
-      // Fingerprint match
+      // 7. Fingerprint check
       final localFp = await getHardwareFingerprint();
-      return localFp == jsonMap['fingerprint'];
-    } catch (_) {
+      final licenseFp = jsonMap['fingerprint'] as String;
+      final fpMatch = localFp == licenseFp;
+      await logService.logInfo(
+          "Step 5: Fingerprints – Local: $localFp, License: $licenseFp");
+      if (!fpMatch) {
+        await logService
+            .logWarning("Verification FAILED: Fingerprint mismatch.");
+        return false;
+      }
+
+      await logService.logInfo("--- License Verification SUCCESS ---");
+      return true;
+    } catch (e, st) {
+      await logService.logError(
+          "Unexpected error during license verification.", e, st);
       return false;
     }
   }
@@ -124,16 +159,17 @@ class LicenseManager {
     await file.writeAsString(licenseJson);
   }
 
-  Future<bool> verifyAndSaveLicense(String licenseJson) async {
-    final valid = await verifyLicense(licenseJson);
+  Future<bool> verifyAndSaveLicense(
+      String licenseJson, LogService logService) async {
+    final valid = await verifyLicense(licenseJson, logService);
     if (valid) await saveLicense(licenseJson);
     return valid;
   }
 
-  Future<bool> hasValidLicense() async {
+  Future<bool> hasValidLicense(LogService logService) async {
     final file = await _licenseFile;
     if (!await file.exists()) return false;
-    final jsonStr = await file.readAsString();
-    return verifyLicense(jsonStr);
+    final content = await file.readAsString();
+    return verifyLicense(content, logService);
   }
 }

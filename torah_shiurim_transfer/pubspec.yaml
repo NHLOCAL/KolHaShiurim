@@ -33,6 +33,7 @@ dependencies:
   pointycastle: any
   basic_utils: any
   windows_system_info: ^0.0.4
+  canonical_json: ^1.1.2
 
 dev_dependencies:
   flutter_test:
