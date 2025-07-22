@@ -6,12 +6,21 @@ import 'package:win32/win32.dart';
 import 'package:torah_shiurim_transfer/models/device_info.dart';
 import 'package:torah_shiurim_transfer/services/log_service.dart';
 
+/// Native signature of the window procedure callback.
+typedef NativeWndProc = IntPtr Function(
+    IntPtr hwnd, Uint32 uMsg, IntPtr wParam, IntPtr lParam);
+
+/// Dart signature of the window procedure callback.
+typedef DartWndProc = int Function(
+    int hwnd, int uMsg, int wParam, int lParam);
+
 class DeviceService {
   final _controller = StreamController<List<ConnectedDeviceInfo>>.broadcast();
   final LogService _logService;
 
   static int _hwnd = 0;
-  static int _originalWndProc = 0;
+  // כעת מאחסנים בפוינטר ולא באינטייגר בלבד
+  static Pointer<NativeFunction<NativeWndProc>> _originalWndProcPtr = nullptr;
   static void Function()? _refreshDevicesCallback;
 
   DeviceService(this._logService) {
@@ -23,7 +32,7 @@ class DeviceService {
 
   Future<void> _initializeWin32Listener() async {
     try {
-      // מחכים עד שהחלון יופיע ויהיה ניתן לאתרו
+      // מחכים עד שהחלון יופיע
       for (var i = 0; i < 10; i++) {
         await Future.delayed(const Duration(milliseconds: 500));
         final ptrTitle = 'העברת שיעורי תורה'.toNativeUtf16();
@@ -43,18 +52,19 @@ class DeviceService {
 
       _logService.logInfo('Found window handle ($_hwnd). Subclassing for device change notifications.');
 
-      // שימו לב: טיפוס הנדרש הוא NativeFunction<WNDPROC>, לא רק WNDPROC
-      final newWndProc = Pointer.fromFunction<NativeFunction<WNDPROC>>(
+      // יוצרים פוינטר חדש ל־WNDPROC עם טיפוס NativeWndProc (ולא NativeFunction<WNDPROC>)
+      final newWndProcPtr = Pointer.fromFunction<NativeWndProc>(
         _wndProc,
         0,
-      );
+      ); // :contentReference[oaicite:0]{index=0}
 
-      _originalWndProc = SetWindowLongPtr(
+      // שומרים את הכתובת הקודמת כמספר, ואז ממירים חזרה לפוינטר
+      final oldProcAddress = SetWindowLongPtr(
         _hwnd,
         GWLP_WNDPROC,
-        newWndProc.address,
+        newWndProcPtr.address,
       );
-      if (_originalWndProc == 0) {
+      if (oldProcAddress == 0) {
         final error = GetLastError();
         _logService.logError(
           'Failed to subclass window procedure. Error code: $error.',
@@ -62,6 +72,8 @@ class DeviceService {
           null,
         );
       } else {
+        _originalWndProcPtr = Pointer.fromAddress(oldProcAddress)
+            .cast<NativeFunction<NativeWndProc>>(); // :contentReference[oaicite:1]{index=1}
         _logService.logInfo('Successfully subclassed window procedure.');
       }
     } catch (e, st) {
@@ -69,18 +81,24 @@ class DeviceService {
     }
   }
 
+  /// הפונקציה שתטפל בהודעות
   static int _wndProc(int hwnd, int uMsg, int wParam, int lParam) {
     if (uMsg == WM_DEVICECHANGE) {
       const dbtDeviceArrival = 0x8000;
       const dbtDeviceRemoveComplete = 0x8004;
 
       if (wParam == dbtDeviceArrival || wParam == dbtDeviceRemoveComplete) {
-        // A device was added or removed. Schedule a refresh to avoid blocking the message loop.
         Future(() => _refreshDevicesCallback?.call());
       }
     }
-    // Always call the original window procedure for other messages
-    return CallWindowProc(_originalWndProc, hwnd, uMsg, wParam, lParam);
+    // מחזירים לקריאה המקורית
+    return CallWindowProc(
+      _originalWndProcPtr,
+      hwnd,
+      uMsg,
+      wParam,
+      lParam,
+    );
   }
 
   Stream<List<ConnectedDeviceInfo>> watchConnectedDevices() =>
@@ -104,22 +122,19 @@ class DeviceService {
         }
 
         final volNameBufNative = calloc<Uint16>(MAX_PATH);
-        final volNameBuf = volNameBufNative.cast<Utf16>();
         final fsNameBufNative = calloc<Uint16>(MAX_PATH);
-        final fsNameBuf = fsNameBufNative.cast<Utf16>();
-
         final pSerialNumber = calloc<Uint32>();
         final pMaxComponentLen = calloc<Uint32>();
         final pFileSystemFlags = calloc<Uint32>();
 
         final success = GetVolumeInformation(
           rootPtr,
-          volNameBuf,
+          volNameBufNative.cast<Utf16>(),
           MAX_PATH,
           pSerialNumber,
           pMaxComponentLen,
           pFileSystemFlags,
-          fsNameBuf,
+          fsNameBufNative.cast<Utf16>(),
           MAX_PATH,
         );
 
@@ -183,8 +198,8 @@ class DeviceService {
   }
 
   void dispose() {
-    if (_originalWndProc != 0 && _hwnd != 0) {
-      SetWindowLongPtr(_hwnd, GWLP_WNDPROC, _originalWndProc);
+    if (_originalWndProcPtr.address != 0 && _hwnd != 0) {
+      SetWindowLongPtr(_hwnd, GWLP_WNDPROC, _originalWndProcPtr.address);
       _logService.logInfo('Restored original window procedure.');
     }
     if (!_controller.isClosed) _controller.close();
