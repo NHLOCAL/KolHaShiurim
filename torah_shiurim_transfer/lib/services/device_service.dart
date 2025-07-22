@@ -6,11 +6,11 @@ import 'package:win32/win32.dart';
 import 'package:torah_shiurim_transfer/models/device_info.dart';
 import 'package:torah_shiurim_transfer/services/log_service.dart';
 
-/// Native signature of the window procedure callback.
+
 typedef NativeWndProc = IntPtr Function(
     IntPtr hwnd, Uint32 uMsg, IntPtr wParam, IntPtr lParam);
 
-/// Dart signature of the window procedure callback.
+
 typedef DartWndProc = int Function(
     int hwnd, int uMsg, int wParam, int lParam);
 
@@ -19,20 +19,20 @@ class DeviceService {
   final LogService _logService;
 
   static int _hwnd = 0;
-  // כעת מאחסנים בפוינטר ולא באינטייגר בלבד
+
   static Pointer<NativeFunction<NativeWndProc>> _originalWndProcPtr = nullptr;
   static void Function()? _refreshDevicesCallback;
 
   DeviceService(this._logService) {
     _logService.logInfo('DeviceService initialized for event-driven detection.');
     _refreshDevicesCallback = _refreshDevices;
-    _initializeWin32Listener(); // Set up the system event listener
-    _refreshDevices(); // Perform an initial scan on startup
+    _initializeWin32Listener();
+    _refreshDevices();
   }
 
   Future<void> _initializeWin32Listener() async {
     try {
-      // מחכים עד שהחלון יופיע
+
       for (var i = 0; i < 10; i++) {
         await Future.delayed(const Duration(milliseconds: 500));
         final ptrTitle = 'העברת שיעורי תורה'.toNativeUtf16();
@@ -52,13 +52,13 @@ class DeviceService {
 
       _logService.logInfo('Found window handle ($_hwnd). Subclassing for device change notifications.');
 
-      // יוצרים פוינטר חדש ל־WNDPROC עם טיפוס NativeWndProc (ולא NativeFunction<WNDPROC>)
+
       final newWndProcPtr = Pointer.fromFunction<NativeWndProc>(
         _wndProc,
         0,
-      ); // :contentReference[oaicite:0]{index=0}
+      );
 
-      // שומרים את הכתובת הקודמת כמספר, ואז ממירים חזרה לפוינטר
+
       final oldProcAddress = SetWindowLongPtr(
         _hwnd,
         GWLP_WNDPROC,
@@ -73,7 +73,7 @@ class DeviceService {
         );
       } else {
         _originalWndProcPtr = Pointer.fromAddress(oldProcAddress)
-            .cast<NativeFunction<NativeWndProc>>(); // :contentReference[oaicite:1]{index=1}
+            .cast<NativeFunction<NativeWndProc>>();
         _logService.logInfo('Successfully subclassed window procedure.');
       }
     } catch (e, st) {
@@ -81,8 +81,16 @@ class DeviceService {
     }
   }
 
-  /// הפונקציה שתטפל בהודעות
+
   static int _wndProc(int hwnd, int uMsg, int wParam, int lParam) {
+    // If a message comes in before SetWindowLongPtr has returned and
+    // _originalWndProcPtr is assigned, _originalWndProcPtr will be null.
+    // In this case, we must call the default window procedure to avoid a crash
+    // and to ensure all messages are processed correctly.
+    if (_originalWndProcPtr == nullptr) {
+      return DefWindowProc(hwnd, uMsg, wParam, lParam);
+    }
+
     if (uMsg == WM_DEVICECHANGE) {
       const dbtDeviceArrival = 0x8000;
       const dbtDeviceRemoveComplete = 0x8004;
@@ -91,7 +99,7 @@ class DeviceService {
         Future(() => _refreshDevicesCallback?.call());
       }
     }
-    // מחזירים לקריאה המקורית
+
     return CallWindowProc(
       _originalWndProcPtr,
       hwnd,
