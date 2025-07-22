@@ -4,7 +4,7 @@ publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.3.0 <4.0.0'
+  sdk: '>=3.8.0 <4.0.0'
 
 dependencies:
   flutter:
@@ -29,7 +29,7 @@ dependencies:
   ffi: ^2.1.2
   window_manager: ^0.4.3
   tray_manager: ^0.5.0
-  win32: any
+  win32: ^5.14.0
   pointycastle: any
   basic_utils: any
   windows_system_info: ^0.0.4
