@@ -1,12 +1,9 @@
-import 'dart:ffi' as ffi;
-import 'dart:io';
-
+import 'dart:ffi' as ffi; // For Pointer and ffi.nullptr
+// If you still need Utf8/malloc, etc.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:torah_shiurim_transfer/services/device_service.dart';
-import 'package:window_manager/window_manager.dart';
 
 import 'package:torah_shiurim_transfer/core/providers/providers.dart';
 import 'package:torah_shiurim_transfer/core/router/router.dart';
@@ -18,36 +15,17 @@ import 'package:win32/win32.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-
+  // Initialize COM for apartment threading
   final hr = CoInitializeEx(ffi.nullptr, COINIT_APARTMENTTHREADED);
   if (FAILED(hr)) {
     throw WindowsException(hr);
   }
 
+  await WindowActions.init();
+
   final container = ProviderContainer();
   final logService = container.read(logServiceProvider);
   await logService.init();
-
-  await windowManager.ensureInitialized();
-
-  const WindowOptions windowOptions = WindowOptions(
-    size: Size(1280, 720),
-    center: true,
-    title: 'העברת שיעורי תורה',
-  );
-
-  windowManager.waitUntilReadyToShow(windowOptions, () async {
-    await windowManager.hide();
-
-    if (Platform.isWindows) {
-      final hwnd = await windowManager.getWin32WindowHandle();
-      final deviceService = DeviceService(logService, hwnd);
-      container.read(deviceServiceProvider.notifier).state = deviceService;
-    }
-  });
-
-
-  await WindowActions.initLogic();
 
   WindowActions.onWindowCloseCallback = () {
     logService.logUserActivity('Application window closed, logging out.');
@@ -56,7 +34,7 @@ void main() async {
 
   await TrayInitializer(container).init();
 
-
+  // Provide router to WindowActions after creation
   final router = container.read(routerProvider);
   WindowActions.router = router;
 
@@ -70,8 +48,8 @@ void main() async {
     ),
   );
 
-
-
+  // (Optional) Uninitialize COM when the app really closes
+  // CoUninitialize();
 }
 
 class MyApp extends ConsumerWidget {
