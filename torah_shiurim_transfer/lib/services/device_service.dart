@@ -6,23 +6,26 @@ import 'package:win32/win32.dart';
 import 'package:torah_shiurim_transfer/models/device_info.dart';
 import 'package:torah_shiurim_transfer/services/log_service.dart';
 
-/// Native signature of the window procedure callback.
+
 typedef NativeWndProc = IntPtr Function(
     IntPtr hwnd, Uint32 uMsg, IntPtr wParam, IntPtr lParam);
+
+
+typedef DartWndProc = int Function(
+    int hwnd, int uMsg, int wParam, int lParam);
 
 class DeviceService {
   final _controller = StreamController<List<ConnectedDeviceInfo>>.broadcast();
   final LogService _logService;
 
   static int _hwnd = 0;
-  // כאן נשמור את הפוינטר המקורי שיחזור בחלון
+
   static Pointer<NativeFunction<NativeWndProc>> _originalWndProcPtr = nullptr;
-  // ה־NativeCallable שלנו
-  static late final NativeCallable<WNDPROC> _newWndProcCallable;
   static void Function()? _refreshDevicesCallback;
 
-  DeviceService(this._logService) {
+  DeviceService(this._logService, int hwnd) {
     _logService.logInfo('DeviceService initialized for event-driven detection.');
+    _hwnd = hwnd;
     _refreshDevicesCallback = _refreshDevices;
     _initializeWin32Listener();
     _refreshDevices();
@@ -30,34 +33,30 @@ class DeviceService {
 
   Future<void> _initializeWin32Listener() async {
     try {
-      // ממתינים עד שיופיע חלון האפליקציה
-      for (var i = 0; i < 10; i++) {
-        await Future.delayed(const Duration(milliseconds: 500));
-        final ptrTitle = 'העברת שיעורי תורה'.toNativeUtf16();
-        _hwnd = FindWindow(nullptr, ptrTitle);
-        calloc.free(ptrTitle);
-        if (_hwnd != 0) break;
-      }
       if (_hwnd == 0) {
         _logService.logError(
-          'Could not find application window handle. Device change notifications will be disabled.',
+          'Invalid window handle provided (0). Device change notifications will be disabled.',
           null,
           null,
         );
         return;
       }
-      _logService.logInfo('Found window handle ($_hwnd). Subclassing for device change notifications.');
 
-      // יוצרים NativeCallable שמנהל את ה‑thunk באופן תקין וידאג לסגירת הזיכרון
-      _newWndProcCallable = NativeCallable<WNDPROC>.defaultCallback(
+      _logService.logInfo('Using window handle ($_hwnd). Subclassing for device change notifications.');
+
+
+      final newWndProcPtr = Pointer.fromFunction<NativeWndProc>(
         _wndProc,
-        exceptionalReturnValue: 0,
-      ); // :contentReference[oaicite:0]{index=0}
+        0,
+      );
 
-      // מגדירים את הפוינטר החדש והמקורי
-      final newProcAddr = _newWndProcCallable.nativeFunction.address;
-      final oldProcAddr = SetWindowLongPtr(_hwnd, GWLP_WNDPROC, newProcAddr);
-      if (oldProcAddr == 0) {
+
+      final oldProcAddress = SetWindowLongPtr(
+        _hwnd,
+        GWLP_WNDPROC,
+        newWndProcPtr.address,
+      );
+      if (oldProcAddress == 0) {
         final error = GetLastError();
         _logService.logError(
           'Failed to subclass window procedure. Error code: $error.',
@@ -65,7 +64,7 @@ class DeviceService {
           null,
         );
       } else {
-        _originalWndProcPtr = Pointer.fromAddress(oldProcAddr)
+        _originalWndProcPtr = Pointer.fromAddress(oldProcAddress)
             .cast<NativeFunction<NativeWndProc>>();
         _logService.logInfo('Successfully subclassed window procedure.');
       }
@@ -74,16 +73,21 @@ class DeviceService {
     }
   }
 
-  /// הפונקציה שמטפלת בהודעות Windows
+
   static int _wndProc(int hwnd, int uMsg, int wParam, int lParam) {
+    if (_originalWndProcPtr == nullptr) {
+      return DefWindowProc(hwnd, uMsg, wParam, lParam);
+    }
+
     if (uMsg == WM_DEVICECHANGE) {
       const dbtDeviceArrival = 0x8000;
       const dbtDeviceRemoveComplete = 0x8004;
+
       if (wParam == dbtDeviceArrival || wParam == dbtDeviceRemoveComplete) {
         Future(() => _refreshDevicesCallback?.call());
       }
     }
-    // קוראים לפונקציית החלון המקורית
+
     return CallWindowProc(
       _originalWndProcPtr,
       hwnd,
@@ -101,15 +105,18 @@ class DeviceService {
     try {
       final devices = <ConnectedDeviceInfo>[];
       final mask = GetLogicalDrives();
+
       for (var i = 0; i < 26; i++) {
         if ((mask & (1 << i)) == 0) continue;
         final letter = String.fromCharCode(65 + i);
         final root = '$letter:\\';
+
         final rootPtr = root.toNativeUtf16();
         if (GetDriveType(rootPtr) != DRIVE_REMOVABLE) {
           calloc.free(rootPtr);
           continue;
         }
+
         final volNameBufNative = calloc<Uint16>(MAX_PATH);
         final fsNameBufNative = calloc<Uint16>(MAX_PATH);
         final pSerialNumber = calloc<Uint32>();
@@ -126,6 +133,7 @@ class DeviceService {
           fsNameBufNative.cast<Utf16>(),
           MAX_PATH,
         );
+
         if (success != 0) {
           final serialHex =
               pSerialNumber.value.toRadixString(16).toUpperCase().padLeft(8, '0');
@@ -136,6 +144,7 @@ class DeviceService {
             serialNumber: formatted,
           ));
         }
+
         calloc.free(rootPtr);
         calloc.free(volNameBufNative);
         calloc.free(fsNameBufNative);
@@ -143,6 +152,7 @@ class DeviceService {
         calloc.free(pMaxComponentLen);
         calloc.free(pFileSystemFlags);
       }
+
       _controller.add(devices);
       _logService.logInfo('Detected ${devices.length} removable volumes.');
     } catch (e, st) {
@@ -159,32 +169,35 @@ class DeviceService {
 
   Future<String> changeVolumeSerialNumber(String mount, String serial) async {
     _logService.logUserActivity('Changing serial for $mount to $serial.');
+
     final s = serial.replaceAll('-', '');
     if (!RegExp(r'^[0-9A-Fa-f]{8}$').hasMatch(s)) {
       _logService.logError('Invalid serial: $serial');
       throw FormatException('Use 8 hex digits, e.g. 1234ABCD.');
     }
+
     final formatted = '${s.substring(0, 4)}-${s.substring(4)}';
     final result = await Process.run(
       'volumeid.exe',
       [mount, formatted],
       runInShell: true,
     );
+
     if (result.exitCode != 0) {
       _logService.logError('volumeid.exe failed: ${result.stderr}');
       throw Exception('Ensure volumeid.exe is in PATH and run as admin.');
     }
+
     await _refreshDevices();
     _logService.logUserActivity('Serial for $mount changed to $formatted.');
     return 'Serial changed to $formatted. Replug device to apply.';
   }
 
   void dispose() {
-    // משחזרים את הפוינטר המקורי וסוגרים את ה־NativeCallable
     if (_originalWndProcPtr.address != 0 && _hwnd != 0) {
       SetWindowLongPtr(_hwnd, GWLP_WNDPROC, _originalWndProcPtr.address);
+      _logService.logInfo('Restored original window procedure.');
     }
-    _newWndProcCallable.close(); // :contentReference[oaicite:1]{index=1}
     if (!_controller.isClosed) _controller.close();
     _logService.logInfo('DeviceService disposed.');
   }

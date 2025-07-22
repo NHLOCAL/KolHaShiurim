@@ -1,5 +1,3 @@
-// core/providers/providers.dart
-
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:torah_shiurim_transfer/core/database/database.dart';
@@ -26,10 +24,8 @@ final licenseStatusProvider = FutureProvider<bool>((ref) async {
 final databaseProvider = Provider<AppDatabase>((_) => AppDatabase());
 final logServiceProvider = Provider<LogService>((_) => LogService());
 
-final deviceServiceProvider = Provider<DeviceService>((ref) {
-  final logService = ref.watch(logServiceProvider);
-  return DeviceService(logService);
-});
+final deviceServiceProvider =
+    StateProvider<DeviceService?>((ref) => null);
 
 final fileServiceProvider = Provider<FileService>((ref) {
   final logService = ref.watch(logServiceProvider);
@@ -37,7 +33,11 @@ final fileServiceProvider = Provider<FileService>((ref) {
 });
 
 final connectedDevicesProvider = StreamProvider<List<ConnectedDeviceInfo>>((ref) {
-  return ref.watch(deviceServiceProvider).watchConnectedDevices();
+  final deviceService = ref.watch(deviceServiceProvider);
+  if (deviceService == null) {
+    return Stream.value([]);
+  }
+  return deviceService.watchConnectedDevices();
 });
 
 final authStateProvider =
@@ -65,7 +65,7 @@ class AuthStateNotifier extends StateNotifier<AppUserState> {
               'Connected devices: ${devices.map((d) => d.serialNumber).join(', ')}'
             );
 
-            // If currently logged in as a user, ensure their device is still connected
+
             state.whenOrNull(user: (user, device, mountPath) {
               final stillConnected = devices.any(
                 (d) => d.serialNumber == device.serialNumber
@@ -78,7 +78,7 @@ class AuthStateNotifier extends StateNotifier<AppUserState> {
               }
             });
 
-            // Auto-login logic if not already logged in
+
             if (!state.isUser && !state.isAdmin) {
               for (final dev in devices) {
                 final db = _ref.read(databaseProvider);

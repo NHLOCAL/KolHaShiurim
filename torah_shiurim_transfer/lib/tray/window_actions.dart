@@ -12,23 +12,32 @@ class WindowActions {
   static late GoRouter router;
   static VoidCallback? onWindowCloseCallback;
 
-  static Future<void> init() async {
-    WidgetsFlutterBinding.ensureInitialized();
-    await windowManager.ensureInitialized();
+  // This part remains in main.dart'swaitUntilReadyToShow
+  // to ensure window is ready before other logic runs.
+  // static Future<void> init() async {
+  //   WidgetsFlutterBinding.ensureInitialized();
+  //   await windowManager.ensureInitialized();
 
-    const WindowOptions windowOptions = WindowOptions(
-      size: Size(1280, 720),
-      center: true,
-      title: 'העברת שיעורי תורה',
-    );
+  //   const WindowOptions windowOptions = WindowOptions(
+  //     size: Size(1280, 720),
+  //     center: true,
+  //     title: 'העברת שיעורי תורה',
+  //   );
 
-    windowManager.waitUntilReadyToShow(windowOptions, () async {
-      await windowManager.hide();
-    });
+  //   windowManager.waitUntilReadyToShow(windowOptions, () async {
+  //     await windowManager.hide();
+  //   });
 
+  //   await windowManager.setPreventClose(true);
+  //   windowManager.addListener(_WindowListener());
+  // }
+
+  // New function to hold the logic that runs after window initialization
+  static Future<void> initLogic() async {
     await windowManager.setPreventClose(true);
     windowManager.addListener(_WindowListener());
   }
+
 
   static void _forceShowOnTop() {
     if (!Platform.isWindows) return;
