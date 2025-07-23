@@ -93,7 +93,7 @@ class _AboutTab extends StatelessWidget {
                     const ListTile(
                       leading: Icon(Icons.business_center_outlined),
                       title: Text('פותח ע"י: NH Local'),
-                      subtitle: Text('חברת "זה קל מערכות"'),
+                      subtitle: Text('זה קל מערכות'),
                       minLeadingWidth: 20,
                     ),
                     ListTile(
