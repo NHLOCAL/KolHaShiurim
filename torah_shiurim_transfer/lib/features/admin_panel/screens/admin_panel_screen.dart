@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:torah_shiurim_transfer/core/providers/providers.dart';
 import 'package:torah_shiurim_transfer/features/admin_panel/device_management_tab.dart';
 import 'package:torah_shiurim_transfer/features/admin_panel/rabbi_management_tab.dart';
 import 'package:torah_shiurim_transfer/features/admin_panel/user_management_tab.dart';
