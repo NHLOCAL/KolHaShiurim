@@ -18,20 +18,6 @@ class AdminPanelScreen extends ConsumerWidget {
       length: 4,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('פאנל ניהול'),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.logout),
-              tooltip: 'התנתקות',
-              onPressed: () {
-                // Log service is available via ref here if needed for the logout action
-                ref
-                    .read(logServiceProvider)
-                    .logUserActivity('Admin clicked logout button.');
-                ref.read(authStateProvider.notifier).logout();
-              },
-            ),
-          ],
           bottom: const TabBar(
             tabs: [
               Tab(icon: Icon(Icons.person_outline), text: 'משתמשים'),
