@@ -36,6 +36,7 @@ dependencies:
   canonical_json: ^1.1.2
   just_audio: ^0.9.36
   just_audio_windows: ^0.2.1
+  url_launcher: ^6.2.6
 
 dev_dependencies:
   flutter_test:
