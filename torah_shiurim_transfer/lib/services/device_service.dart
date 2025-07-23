@@ -25,7 +25,6 @@ class DeviceService {
   }
 
   Future<void> _refreshDevices() async {
-    _logService.logInfo('Refreshing connected volumes via Win32 API.');
     try {
       final devices = <ConnectedDeviceInfo>[];
       final mask = GetLogicalDrives();
@@ -48,7 +47,7 @@ class DeviceService {
         final fsNameBufNative = calloc<Uint16>(MAX_PATH);
         final fsNameBuf = fsNameBufNative.cast<Utf16>();
 
-        final pSerialNumber    = calloc<Uint32>();
+        final pSerialNumber = calloc<Uint32>();
         final pMaxComponentLen = calloc<Uint32>();
         final pFileSystemFlags = calloc<Uint32>();
 
@@ -68,11 +67,11 @@ class DeviceService {
               .toRadixString(16)
               .toUpperCase()
               .padLeft(8, '0');
-          final formatted  = '${serialHex.substring(0,4)}-${serialHex.substring(4)}';
-          devices.add(ConnectedDeviceInfo(
-            mountPath: root,
-            serialNumber: formatted,
-          ));
+          final formatted =
+              '${serialHex.substring(0, 4)}-${serialHex.substring(4)}';
+          devices.add(
+            ConnectedDeviceInfo(mountPath: root, serialNumber: formatted),
+          );
         }
 
         // שיחרור כל הזיכרון שהוקצה
@@ -85,7 +84,6 @@ class DeviceService {
       }
 
       _controller.add(devices);
-      _logService.logInfo('Detected ${devices.length} removable volumes.');
     } catch (e, st) {
       _logService.logError('Error enumerating drives', e, st);
     }
@@ -107,12 +105,11 @@ class DeviceService {
       throw FormatException('Use 8 hex digits, e.g. 1234ABCD.');
     }
 
-    final formatted = '${s.substring(0,4)}-${s.substring(4)}';
-    final result = await Process.run(
-      'volumeid.exe',
-      [mount, formatted],
-      runInShell: true,
-    );
+    final formatted = '${s.substring(0, 4)}-${s.substring(4)}';
+    final result = await Process.run('volumeid.exe', [
+      mount,
+      formatted,
+    ], runInShell: true);
 
     if (result.exitCode != 0) {
       _logService.logError('volumeid.exe failed: ${result.stderr}');
