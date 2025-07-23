@@ -34,6 +34,8 @@ dependencies:
   basic_utils: any
   windows_system_info: ^0.0.4
   canonical_json: ^1.1.2
+  just_audio: ^0.9.36
+  just_audio_windows: ^0.2.1
 
 dev_dependencies:
   flutter_test:

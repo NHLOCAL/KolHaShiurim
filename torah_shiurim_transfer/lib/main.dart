@@ -16,7 +16,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize COM for apartment threading
-  final hr = CoInitializeEx(ffi.nullptr, COINIT_APARTMENTTHREADED);
+  final hr = CoInitializeEx(ffi.nullptr, COINIT_MULTITHREADED);
   if (FAILED(hr)) {
     throw WindowsException(hr);
   }
@@ -41,12 +41,7 @@ void main() async {
   await container.read(databaseProvider).getAppSettings();
   logService.logInfo('App settings loaded.');
 
-  runApp(
-    UncontrolledProviderScope(
-      container: container,
-      child: const MyApp(),
-    ),
-  );
+  runApp(UncontrolledProviderScope(container: container, child: const MyApp()));
 
   // (Optional) Uninitialize COM when the app really closes
   // CoUninitialize();
@@ -66,20 +61,14 @@ class MyApp extends ConsumerWidget {
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         scaffoldBackgroundColor: Colors.grey.shade100,
-        appBarTheme: const AppBarTheme(
-          centerTitle: true,
-          elevation: 1,
-        ),
+        appBarTheme: const AppBarTheme(centerTitle: true, elevation: 1),
       ),
-      darkTheme: ThemeData.dark(useMaterial3: true).copyWith(
-        appBarTheme: const AppBarTheme(centerTitle: true),
-      ),
+      darkTheme: ThemeData.dark(
+        useMaterial3: true,
+      ).copyWith(appBarTheme: const AppBarTheme(centerTitle: true)),
       themeMode: ThemeMode.light,
       locale: const Locale('he', 'IL'),
-      supportedLocales: const [
-        Locale('he', 'IL'),
-        Locale('en', 'US'),
-      ],
+      supportedLocales: const [Locale('he', 'IL'), Locale('en', 'US')],
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,

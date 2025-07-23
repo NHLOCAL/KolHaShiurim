@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:kosher_dart/kosher_dart.dart';
 import 'package:material_hebrew_date_picker/material_hebrew_date_picker.dart';
 import 'package:path/path.dart' as p;
@@ -32,6 +33,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
   bool _isCopying = false;
   AppSetting? _appSettings;
   late final LogService _logService;
+  late final AudioPlayer _audioPlayer;
 
   final List<List<String>> _hebrewKeys = const [
     ['-', '0', '9', '8', '7', '6', '5', '4', '3', '2', '1'],
@@ -44,6 +46,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
   void initState() {
     super.initState();
     _logService = ref.read(logServiceProvider);
+    _audioPlayer = AudioPlayer();
     _loadSettings();
     _logService.logInfo('Transfer Details Panel initialized.');
   }
@@ -51,8 +54,20 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
   @override
   void didUpdateWidget(covariant TransferDetailsPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.selectedFile != null && oldWidget.selectedFile == null) {
-      _resetForm();
+    if (widget.selectedFile != oldWidget.selectedFile) {
+      _audioPlayer.stop();
+      if (widget.selectedFile != null) {
+        _resetForm();
+        try {
+          _audioPlayer.setFilePath(widget.selectedFile!.path);
+        } catch (e) {
+          _logService.logError(
+            "Error setting audio source",
+            e,
+            StackTrace.current,
+          );
+        }
+      }
     }
   }
 
@@ -74,6 +89,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
   @override
   void dispose() {
     _topicController.dispose();
+    _audioPlayer.dispose();
     super.dispose();
   }
 
@@ -260,6 +276,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
   }
 
   Future<void> _copyFile() async {
+    await _audioPlayer.stop();
     if (widget.selectedFile == null ||
         _selectedPermission == null ||
         _appSettings == null) {
@@ -497,6 +514,122 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
     );
   }
 
+  Widget _buildAudioPlayer() {
+    final theme = Theme.of(context);
+    String formatDuration(Duration? d) {
+      if (d == null) return "--:--";
+      final minutes = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+      final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+      return "$minutes:$seconds";
+    }
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      elevation: 2,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: StreamBuilder<Duration?>(
+              stream: _audioPlayer.durationStream,
+              builder: (context, snapshot) {
+                final duration = snapshot.data ?? Duration.zero;
+                return StreamBuilder<Duration>(
+                  stream: _audioPlayer.positionStream,
+                  builder: (context, snapshot) {
+                    var position = snapshot.data ?? Duration.zero;
+                    if (position > duration) position = duration;
+                    return Column(
+                      children: [
+                        Slider(
+                          value: position.inMilliseconds.toDouble(),
+                          max: duration.inMilliseconds.toDouble(),
+                          onChanged: (value) {
+                            _audioPlayer.seek(
+                              Duration(milliseconds: value.round()),
+                            );
+                          },
+                        ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(formatDuration(position)),
+                            Text(formatDuration(duration)),
+                          ],
+                        ),
+                      ],
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              StreamBuilder<double>(
+                stream: _audioPlayer.volumeStream,
+                builder: (context, snapshot) {
+                  return SizedBox(
+                    width: 150,
+                    child: Row(
+                      children: [
+                        Icon(
+                          snapshot.data == 0
+                              ? Icons.volume_off
+                              : Icons.volume_up,
+                          color: theme.colorScheme.secondary,
+                        ),
+                        Expanded(
+                          child: Slider(
+                            value: snapshot.data ?? 1.0,
+                            onChanged: _audioPlayer.setVolume,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(width: 16),
+              StreamBuilder<PlayerState>(
+                stream: _audioPlayer.playerStateStream,
+                builder: (context, snapshot) {
+                  final playerState = snapshot.data;
+                  final processingState = playerState?.processingState;
+                  final playing = playerState?.playing;
+                  if (processingState == ProcessingState.loading ||
+                      processingState == ProcessingState.buffering) {
+                    return const CircularProgressIndicator();
+                  } else if (playing != true) {
+                    return IconButton.filled(
+                      icon: const Icon(Icons.play_arrow),
+                      iconSize: 42,
+                      onPressed: _audioPlayer.play,
+                    );
+                  } else if (processingState != ProcessingState.completed) {
+                    return IconButton.filled(
+                      icon: const Icon(Icons.pause),
+                      iconSize: 42,
+                      onPressed: _audioPlayer.pause,
+                    );
+                  } else {
+                    return IconButton.filled(
+                      icon: const Icon(Icons.replay),
+                      iconSize: 42,
+                      onPressed: () => _audioPlayer.seek(Duration.zero),
+                    );
+                  }
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final allowedRabbisAsync = ref.watch(allowedRabbisProvider);
@@ -607,6 +740,8 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
                   title: const Text('קובץ מקור:'),
                   subtitle: Text(p.basename(widget.selectedFile!.path)),
                 ),
+                const SizedBox(height: 12),
+                _buildAudioPlayer(),
                 const SizedBox(height: 20),
                 allowedRabbisAsync.when(
                   data: (permissions) =>
