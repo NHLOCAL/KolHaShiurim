@@ -515,7 +515,6 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
   }
 
   Widget _buildAudioPlayer() {
-    final theme = Theme.of(context);
     String formatDuration(Duration? d) {
       if (d == null) return "--:--";
       final minutes = d.inMinutes.remainder(60).toString().padLeft(2, '0');
@@ -526,11 +525,47 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
     return Card(
       clipBehavior: Clip.antiAlias,
       elevation: 2,
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child: StreamBuilder<Duration?>(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+        child: StreamBuilder<PlayerState>(
+          stream: _audioPlayer.playerStateStream,
+          builder: (context, snapshot) {
+            final playerState = snapshot.data;
+            final processingState = playerState?.processingState;
+            final playing = playerState?.playing;
+
+            Widget playPauseButton;
+            if (processingState == ProcessingState.loading ||
+                processingState == ProcessingState.buffering) {
+              playPauseButton = const SizedBox(
+                width: 48.0,
+                height: 48.0,
+                child: Padding(
+                  padding: EdgeInsets.all(8.0),
+                  child: CircularProgressIndicator(),
+                ),
+              );
+            } else if (playing != true) {
+              playPauseButton = IconButton(
+                icon: const Icon(Icons.play_arrow),
+                iconSize: 32,
+                onPressed: _audioPlayer.play,
+              );
+            } else if (processingState != ProcessingState.completed) {
+              playPauseButton = IconButton(
+                icon: const Icon(Icons.pause),
+                iconSize: 32,
+                onPressed: _audioPlayer.pause,
+              );
+            } else {
+              playPauseButton = IconButton(
+                icon: const Icon(Icons.replay),
+                iconSize: 32,
+                onPressed: () => _audioPlayer.seek(Duration.zero),
+              );
+            }
+
+            return StreamBuilder<Duration?>(
               stream: _audioPlayer.durationStream,
               builder: (context, snapshot) {
                 final duration = snapshot.data ?? Duration.zero;
@@ -539,93 +574,61 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
                   builder: (context, snapshot) {
                     var position = snapshot.data ?? Duration.zero;
                     if (position > duration) position = duration;
-                    return Column(
+                    return Row(
                       children: [
-                        Slider(
-                          value: position.inMilliseconds.toDouble(),
-                          max: duration.inMilliseconds.toDouble(),
-                          onChanged: (value) {
-                            _audioPlayer.seek(
-                              Duration(milliseconds: value.round()),
+                        playPauseButton,
+                        Text(
+                          formatDuration(position),
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        Expanded(
+                          child: Slider(
+                            value: position.inMilliseconds.toDouble(),
+                            max: duration.inMilliseconds.toDouble(),
+                            onChanged: (value) {
+                              _audioPlayer.seek(
+                                Duration(milliseconds: value.round()),
+                              );
+                            },
+                          ),
+                        ),
+                        Text(
+                          formatDuration(duration),
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        StreamBuilder<double>(
+                          stream: _audioPlayer.volumeStream,
+                          builder: (context, snapshot) {
+                            return Row(
+                              children: [
+                                Icon(
+                                  (snapshot.data ?? 1.0) > 0
+                                      ? Icons.volume_up
+                                      : Icons.volume_off,
+                                  size: 20,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.secondary,
+                                ),
+                                SizedBox(
+                                  width: 100,
+                                  child: Slider(
+                                    value: snapshot.data ?? 1.0,
+                                    onChanged: _audioPlayer.setVolume,
+                                  ),
+                                ),
+                              ],
                             );
                           },
-                        ),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(formatDuration(position)),
-                            Text(formatDuration(duration)),
-                          ],
                         ),
                       ],
                     );
                   },
                 );
               },
-            ),
-          ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              StreamBuilder<double>(
-                stream: _audioPlayer.volumeStream,
-                builder: (context, snapshot) {
-                  return SizedBox(
-                    width: 150,
-                    child: Row(
-                      children: [
-                        Icon(
-                          snapshot.data == 0
-                              ? Icons.volume_off
-                              : Icons.volume_up,
-                          color: theme.colorScheme.secondary,
-                        ),
-                        Expanded(
-                          child: Slider(
-                            value: snapshot.data ?? 1.0,
-                            onChanged: _audioPlayer.setVolume,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(width: 16),
-              StreamBuilder<PlayerState>(
-                stream: _audioPlayer.playerStateStream,
-                builder: (context, snapshot) {
-                  final playerState = snapshot.data;
-                  final processingState = playerState?.processingState;
-                  final playing = playerState?.playing;
-                  if (processingState == ProcessingState.loading ||
-                      processingState == ProcessingState.buffering) {
-                    return const CircularProgressIndicator();
-                  } else if (playing != true) {
-                    return IconButton.filled(
-                      icon: const Icon(Icons.play_arrow),
-                      iconSize: 42,
-                      onPressed: _audioPlayer.play,
-                    );
-                  } else if (processingState != ProcessingState.completed) {
-                    return IconButton.filled(
-                      icon: const Icon(Icons.pause),
-                      iconSize: 42,
-                      onPressed: _audioPlayer.pause,
-                    );
-                  } else {
-                    return IconButton.filled(
-                      icon: const Icon(Icons.replay),
-                      iconSize: 42,
-                      onPressed: () => _audioPlayer.seek(Duration.zero),
-                    );
-                  }
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-        ],
+            );
+          },
+        ),
       ),
     );
   }
