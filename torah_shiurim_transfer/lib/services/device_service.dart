@@ -102,7 +102,7 @@ class DeviceService {
     final s = serial.replaceAll('-', '');
     if (!RegExp(r'^[0-9A-Fa-f]{8}$').hasMatch(s)) {
       _logService.logError('Invalid serial: $serial');
-      throw FormatException('Use 8 hex digits, e.g. 1234ABCD.');
+      throw const FormatException('Use 8 hex digits, e.g. 1234ABCD.');
     }
 
     final formatted = '${s.substring(0, 4)}-${s.substring(4)}';

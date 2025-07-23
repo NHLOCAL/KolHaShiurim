@@ -8,8 +8,7 @@ import 'package:torah_shiurim_transfer/core/providers/providers.dart';
 
 class LicenseScreen extends ConsumerStatefulWidget {
   final LicenseManager licenseManager;
-  const LicenseScreen({required this.licenseManager, Key? key})
-      : super(key: key);
+  const LicenseScreen({required this.licenseManager, super.key});
 
   @override
   ConsumerState<LicenseScreen> createState() => _LicenseScreenState();
@@ -81,8 +80,10 @@ class _LicenseScreenState extends ConsumerState<LicenseScreen> {
 
     final logService = ref.read(logServiceProvider);
 
-    final valid = await widget.licenseManager
-        .verifyAndSaveLicense(_controller.text, logService);
+    final valid = await widget.licenseManager.verifyAndSaveLicense(
+      _controller.text,
+      logService,
+    );
 
     if (mounted) {
       if (valid) {
@@ -138,7 +139,8 @@ class _LicenseScreenState extends ConsumerState<LicenseScreen> {
                           ? const SizedBox(
                               width: 16,
                               height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2))
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
                           : const Icon(Icons.verified_user),
                       onPressed: _isLoading ? null : _verify,
                       label: const Text('הפעל'),
@@ -151,25 +153,28 @@ class _LicenseScreenState extends ConsumerState<LicenseScreen> {
                     _statusMessage!,
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                        color: _statusMessage!.contains('שגיאה') ||
-                                _statusMessage!.contains('אינו תקף')
-                            ? Colors.red
-                            : Colors.green.shade800),
+                      color:
+                          _statusMessage!.contains('שגיאה') ||
+                              _statusMessage!.contains('אינו תקף')
+                          ? Colors.red
+                          : Colors.green.shade800,
+                    ),
                   ),
                 ],
                 const Spacer(),
                 Card(
                   elevation: 0,
-                  color: Theme.of(context)
-                      .colorScheme
-                      .surfaceVariant
-                      .withOpacity(0.5),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.surfaceContainerHighest.withOpacity(0.5),
                   child: Padding(
                     padding: const EdgeInsets.all(8.0),
                     child: Column(
                       children: [
-                        const Text('טביעת אצבע של חומרה זו:',
-                            style: TextStyle(fontWeight: FontWeight.bold)),
+                        const Text(
+                          'טביעת אצבע של חומרה זו:',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
                         const SizedBox(height: 4),
                         Row(
                           // Add a Row to place the SelectableText and Copy button side-by-side
@@ -177,25 +182,33 @@ class _LicenseScreenState extends ConsumerState<LicenseScreen> {
                           children: [
                             Expanded(
                               // Make SelectableText take available space
-                              child: SelectableText(_hardwareFingerprint,
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                      fontFamily: 'monospace', fontSize: 12)),
+                              child: SelectableText(
+                                _hardwareFingerprint,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  fontFamily: 'monospace',
+                                  fontSize: 12,
+                                ),
+                              ),
                             ),
                             IconButton(
                               icon: const Icon(Icons.copy, size: 18),
                               tooltip: 'העתק טביעת אצבע',
                               onPressed: () {
                                 Clipboard.setData(
-                                    ClipboardData(text: _hardwareFingerprint));
+                                  ClipboardData(text: _hardwareFingerprint),
+                                );
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
                                     content: Text('טביעת אצבע הועתקה ללוח.'),
                                     duration: Duration(seconds: 2),
                                   ),
                                 );
-                                ref.read(logServiceProvider).logUserActivity(
-                                    'Hardware fingerprint copied to clipboard.');
+                                ref
+                                    .read(logServiceProvider)
+                                    .logUserActivity(
+                                      'Hardware fingerprint copied to clipboard.',
+                                    );
                               },
                             ),
                           ],
@@ -203,7 +216,7 @@ class _LicenseScreenState extends ConsumerState<LicenseScreen> {
                       ],
                     ),
                   ),
-                )
+                ),
               ],
             ),
           ),

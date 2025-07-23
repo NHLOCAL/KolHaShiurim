@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -16,8 +15,9 @@ final routerProvider = Provider<GoRouter>((ref) {
   // The refresh listenable needs to react to both auth and license changes.
   // We can achieve this by creating a custom stream or simply by letting
   // the provider re-creation handle it, which it does.
-  final refreshListenable =
-      GoRouterRefreshStream(ref.watch(authStateProvider.notifier).stream);
+  final refreshListenable = GoRouterRefreshStream(
+    ref.watch(authStateProvider.notifier).stream,
+  );
   ref.onDispose(refreshListenable.dispose);
 
   return GoRouter(
@@ -31,10 +31,11 @@ final routerProvider = Provider<GoRouter>((ref) {
           return licenseManagerAsync.when(
             data: (manager) => LicenseScreen(licenseManager: manager),
             loading: () => const Scaffold(
-                body: Center(child: CircularProgressIndicator())),
+              body: Center(child: CircularProgressIndicator()),
+            ),
             error: (err, stack) => Scaffold(
-                body:
-                    Center(child: Text('Error loading license manager: $err'))),
+              body: Center(child: Text('Error loading license manager: $err')),
+            ),
           );
         },
       ),
