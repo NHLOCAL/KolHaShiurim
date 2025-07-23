@@ -12,7 +12,8 @@ part of 'app_user.dart';
 T _$identity<T>(T value) => value;
 
 final _privateConstructorUsedError = UnsupportedError(
-    'It seems like you constructed your class using `MyClass._()`. This constructor is only meant to be used by freezed and you are not supposed to need it nor use it.\nPlease check the documentation here for more information: https://github.com/rrousselGit/freezed#adding-getters-and-methods-to-our-models');
+  'It seems like you constructed your class using `MyClass._()`. This constructor is only meant to be used by freezed and you are not supposed to need it nor use it.\nPlease check the documentation here for more information: https://github.com/rrousselGit/freezed#adding-getters-and-methods-to-our-models',
+);
 
 /// @nodoc
 mixin _$AppUserState {
@@ -21,52 +22,47 @@ mixin _$AppUserState {
     required TResult Function() loggedOut,
     required TResult Function() admin,
     required TResult Function(User user, Device device, String mountPath) user,
-  }) =>
-      throw _privateConstructorUsedError;
+  }) => throw _privateConstructorUsedError;
   @optionalTypeArgs
   TResult? whenOrNull<TResult extends Object?>({
     TResult? Function()? loggedOut,
     TResult? Function()? admin,
     TResult? Function(User user, Device device, String mountPath)? user,
-  }) =>
-      throw _privateConstructorUsedError;
+  }) => throw _privateConstructorUsedError;
   @optionalTypeArgs
   TResult maybeWhen<TResult extends Object?>({
     TResult Function()? loggedOut,
     TResult Function()? admin,
     TResult Function(User user, Device device, String mountPath)? user,
     required TResult orElse(),
-  }) =>
-      throw _privateConstructorUsedError;
+  }) => throw _privateConstructorUsedError;
   @optionalTypeArgs
   TResult map<TResult extends Object?>({
     required TResult Function(_LoggedOut value) loggedOut,
     required TResult Function(_Admin value) admin,
     required TResult Function(_User value) user,
-  }) =>
-      throw _privateConstructorUsedError;
+  }) => throw _privateConstructorUsedError;
   @optionalTypeArgs
   TResult? mapOrNull<TResult extends Object?>({
     TResult? Function(_LoggedOut value)? loggedOut,
     TResult? Function(_Admin value)? admin,
     TResult? Function(_User value)? user,
-  }) =>
-      throw _privateConstructorUsedError;
+  }) => throw _privateConstructorUsedError;
   @optionalTypeArgs
   TResult maybeMap<TResult extends Object?>({
     TResult Function(_LoggedOut value)? loggedOut,
     TResult Function(_Admin value)? admin,
     TResult Function(_User value)? user,
     required TResult orElse(),
-  }) =>
-      throw _privateConstructorUsedError;
+  }) => throw _privateConstructorUsedError;
 }
 
 /// @nodoc
 abstract class $AppUserStateCopyWith<$Res> {
   factory $AppUserStateCopyWith(
-          AppUserState value, $Res Function(AppUserState) then) =
-      _$AppUserStateCopyWithImpl<$Res, AppUserState>;
+    AppUserState value,
+    $Res Function(AppUserState) then,
+  ) = _$AppUserStateCopyWithImpl<$Res, AppUserState>;
 }
 
 /// @nodoc
@@ -86,8 +82,9 @@ class _$AppUserStateCopyWithImpl<$Res, $Val extends AppUserState>
 /// @nodoc
 abstract class _$$LoggedOutImplCopyWith<$Res> {
   factory _$$LoggedOutImplCopyWith(
-          _$LoggedOutImpl value, $Res Function(_$LoggedOutImpl) then) =
-      __$$LoggedOutImplCopyWithImpl<$Res>;
+    _$LoggedOutImpl value,
+    $Res Function(_$LoggedOutImpl) then,
+  ) = __$$LoggedOutImplCopyWithImpl<$Res>;
 }
 
 /// @nodoc
@@ -95,8 +92,9 @@ class __$$LoggedOutImplCopyWithImpl<$Res>
     extends _$AppUserStateCopyWithImpl<$Res, _$LoggedOutImpl>
     implements _$$LoggedOutImplCopyWith<$Res> {
   __$$LoggedOutImplCopyWithImpl(
-      _$LoggedOutImpl _value, $Res Function(_$LoggedOutImpl) _then)
-      : super(_value, _then);
+    _$LoggedOutImpl _value,
+    $Res Function(_$LoggedOutImpl) _then,
+  ) : super(_value, _then);
 
   /// Create a copy of AppUserState
   /// with the given fields replaced by the non-null parameter values.
@@ -204,8 +202,9 @@ abstract class _LoggedOut extends AppUserState {
 /// @nodoc
 abstract class _$$AdminImplCopyWith<$Res> {
   factory _$$AdminImplCopyWith(
-          _$AdminImpl value, $Res Function(_$AdminImpl) then) =
-      __$$AdminImplCopyWithImpl<$Res>;
+    _$AdminImpl value,
+    $Res Function(_$AdminImpl) then,
+  ) = __$$AdminImplCopyWithImpl<$Res>;
 }
 
 /// @nodoc
@@ -213,8 +212,9 @@ class __$$AdminImplCopyWithImpl<$Res>
     extends _$AppUserStateCopyWithImpl<$Res, _$AdminImpl>
     implements _$$AdminImplCopyWith<$Res> {
   __$$AdminImplCopyWithImpl(
-      _$AdminImpl _value, $Res Function(_$AdminImpl) _then)
-      : super(_value, _then);
+    _$AdminImpl _value,
+    $Res Function(_$AdminImpl) _then,
+  ) : super(_value, _then);
 
   /// Create a copy of AppUserState
   /// with the given fields replaced by the non-null parameter values.
@@ -322,8 +322,9 @@ abstract class _Admin extends AppUserState {
 /// @nodoc
 abstract class _$$UserImplCopyWith<$Res> {
   factory _$$UserImplCopyWith(
-          _$UserImpl value, $Res Function(_$UserImpl) then) =
-      __$$UserImplCopyWithImpl<$Res>;
+    _$UserImpl value,
+    $Res Function(_$UserImpl) then,
+  ) = __$$UserImplCopyWithImpl<$Res>;
   @useResult
   $Res call({User user, Device device, String mountPath});
 }
@@ -333,7 +334,7 @@ class __$$UserImplCopyWithImpl<$Res>
     extends _$AppUserStateCopyWithImpl<$Res, _$UserImpl>
     implements _$$UserImplCopyWith<$Res> {
   __$$UserImplCopyWithImpl(_$UserImpl _value, $Res Function(_$UserImpl) _then)
-      : super(_value, _then);
+    : super(_value, _then);
 
   /// Create a copy of AppUserState
   /// with the given fields replaced by the non-null parameter values.
@@ -344,29 +345,33 @@ class __$$UserImplCopyWithImpl<$Res>
     Object? device = null,
     Object? mountPath = null,
   }) {
-    return _then(_$UserImpl(
-      user: null == user
-          ? _value.user
-          : user // ignore: cast_nullable_to_non_nullable
-              as User,
-      device: null == device
-          ? _value.device
-          : device // ignore: cast_nullable_to_non_nullable
-              as Device,
-      mountPath: null == mountPath
-          ? _value.mountPath
-          : mountPath // ignore: cast_nullable_to_non_nullable
-              as String,
-    ));
+    return _then(
+      _$UserImpl(
+        user: null == user
+            ? _value.user
+            : user // ignore: cast_nullable_to_non_nullable
+                  as User,
+        device: null == device
+            ? _value.device
+            : device // ignore: cast_nullable_to_non_nullable
+                  as Device,
+        mountPath: null == mountPath
+            ? _value.mountPath
+            : mountPath // ignore: cast_nullable_to_non_nullable
+                  as String,
+      ),
+    );
   }
 }
 
 /// @nodoc
 
 class _$UserImpl extends _User with DiagnosticableTreeMixin {
-  const _$UserImpl(
-      {required this.user, required this.device, required this.mountPath})
-      : super._();
+  const _$UserImpl({
+    required this.user,
+    required this.device,
+    required this.mountPath,
+  }) : super._();
 
   @override
   final User user;
@@ -482,10 +487,11 @@ class _$UserImpl extends _User with DiagnosticableTreeMixin {
 }
 
 abstract class _User extends AppUserState {
-  const factory _User(
-      {required final User user,
-      required final Device device,
-      required final String mountPath}) = _$UserImpl;
+  const factory _User({
+    required final User user,
+    required final Device device,
+    required final String mountPath,
+  }) = _$UserImpl;
   const _User._() : super._();
 
   User get user;

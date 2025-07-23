@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/drift.dart';
@@ -8,14 +9,16 @@ import 'package:path/path.dart' as p;
 part 'tables.dart';
 part 'database.g.dart';
 
-@DriftDatabase(tables: [
-  Users,
-  Devices,
-  Rabbis,
-  UserRabbiPermissions,
-  Transfers,
-  AppSettings
-])
+@DriftDatabase(
+  tables: [
+    Users,
+    Devices,
+    Rabbis,
+    UserRabbiPermissions,
+    Transfers,
+    AppSettings,
+  ],
+)
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
@@ -34,19 +37,15 @@ class AppDatabase extends _$AppDatabase {
         }
         if (from < 3) {
           await m.addColumn(
-              userRabbiPermissions, userRabbiPermissions.specificPath);
+            userRabbiPermissions,
+            userRabbiPermissions.specificPath,
+          );
         }
 
         if (from < 4) {
           await m.addColumn(users, users.additionalInfo);
         }
-        if (from < 5) {
-          // The `isAdmin` column was removed from the `Users` table class.
-          // In a real-world scenario with existing data, a data migration
-          // (copy to new table, drop old, rename new) would be needed.
-          // For this project's scope, we assume new databases or unimportant
-          // old data for this specific column. Drift will handle the schema change.
-        }
+        if (from < 5) {}
       },
     );
   }
@@ -60,9 +59,9 @@ class AppDatabase extends _$AppDatabase {
 
   Stream<List<Device>> watchAllDevices() => select(devices).watch();
   Stream<List<DeviceWithUser>> watchAllDevicesWithUser() {
-    final query = select(devices).join([
-      innerJoin(users, users.id.equalsExp(devices.userId)),
-    ]);
+    final query = select(
+      devices,
+    ).join([innerJoin(users, users.id.equalsExp(devices.userId))]);
     return query.watch().map((rows) {
       return rows.map((row) {
         return DeviceWithUser(
@@ -73,9 +72,9 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
-  Future<Device?> getDeviceBySerial(String serial) =>
-      (select(devices)..where((d) => d.serialNumber.equals(serial)))
-          .getSingleOrNull();
+  Future<Device?> getDeviceBySerial(String serial) => (select(
+    devices,
+  )..where((d) => d.serialNumber.equals(serial))).getSingleOrNull();
   Future<int> insertDevice(DevicesCompanion device) =>
       into(devices).insert(device);
   Future<bool> updateDevice(DevicesCompanion device) =>
@@ -91,40 +90,70 @@ class AppDatabase extends _$AppDatabase {
       (delete(rabbis)..where((r) => r.id.equals(id))).go();
 
   Stream<List<UserPermissionInfo>> watchPermissionsForUser(int userId) {
-    final query = select(userRabbiPermissions).join(
-        [innerJoin(rabbis, rabbis.id.equalsExp(userRabbiPermissions.rabbiId))])
-      ..where(userRabbiPermissions.userId.equals(userId));
-    return query.watch().map((rows) => rows.map((row) {
-          final p = row.readTable(userRabbiPermissions);
-          return UserPermissionInfo(
-            rabbi: row.readTable(rabbis),
-            specificPath: p.specificPath,
-          );
-        }).toList());
+    final query = select(userRabbiPermissions).join([
+      innerJoin(rabbis, rabbis.id.equalsExp(userRabbiPermissions.rabbiId)),
+    ])..where(userRabbiPermissions.userId.equals(userId));
+    return query.watch().map(
+      (rows) => rows.map((row) {
+        final p = row.readTable(userRabbiPermissions);
+        final rawPathData = p.specificPath;
+        List<String?> paths = [];
+        if (rawPathData != null && rawPathData.isNotEmpty) {
+          try {
+            final decoded = json.decode(rawPathData) as List;
+            paths = decoded.map((e) => e as String?).toList();
+            if (paths.isEmpty) {
+              paths.add(null);
+            }
+          } catch (e) {
+            paths.add(rawPathData);
+          }
+        } else {
+          paths.add(null);
+        }
+
+        return UserPermissionInfo(
+          rabbi: row.readTable(rabbis),
+          specificPaths: paths,
+        );
+      }).toList(),
+    );
   }
 
   Future<void> setPermissionsForUser(
-      int userId, Map<int, String?> permissions) async {
+    int userId,
+    Map<int, List<String?>> permissions,
+  ) async {
     await transaction(() async {
-      await (delete(userRabbiPermissions)
-            ..where((p) => p.userId.equals(userId)))
-          .go();
+      await (delete(
+        userRabbiPermissions,
+      )..where((p) => p.userId.equals(userId))).go();
       for (final entry in permissions.entries) {
         final rabbiId = entry.key;
-        final specificPath = entry.value;
+        final paths = entry.value;
+
+        final cleanPaths = paths
+            .where((p) => p != null && p.trim().isNotEmpty)
+            .map((p) => p!.trim())
+            .toList();
+
+        final specificPathJson = json.encode(cleanPaths);
+
         await into(userRabbiPermissions).insert(
-            UserRabbiPermissionsCompanion.insert(
-                userId: userId,
-                rabbiId: rabbiId,
-                specificPath: Value(specificPath)));
+          UserRabbiPermissionsCompanion.insert(
+            userId: userId,
+            rabbiId: rabbiId,
+            specificPath: Value(specificPathJson),
+          ),
+        );
       }
     });
   }
 
   Future<List<UserRabbiPermission>> getPermissionsForUser(int userId) async {
-    final permissions = await (select(userRabbiPermissions)
-          ..where((p) => p.userId.equals(userId)))
-        .get();
+    final permissions = await (select(
+      userRabbiPermissions,
+    )..where((p) => p.userId.equals(userId))).get();
     return permissions;
   }
 
@@ -132,14 +161,17 @@ class AppDatabase extends _$AppDatabase {
       into(transfers).insert(transfer);
 
   Future<AppSetting> getAppSettings() async {
-    var setting = await (select(appSettings)..where((s) => s.id.equals(1)))
-        .getSingleOrNull();
+    var setting = await (select(
+      appSettings,
+    )..where((s) => s.id.equals(1))).getSingleOrNull();
     if (setting == null) {
       final defaultSettings = AppSettingsCompanion.insert(id: const Value(1));
-      await into(appSettings)
-          .insert(defaultSettings, mode: InsertMode.insertOrIgnore);
-      setting =
-          await (select(appSettings)..where((s) => s.id.equals(1))).getSingle();
+      await into(
+        appSettings,
+      ).insert(defaultSettings, mode: InsertMode.insertOrIgnore);
+      setting = await (select(
+        appSettings,
+      )..where((s) => s.id.equals(1))).getSingle();
     }
     return setting;
   }
@@ -161,8 +193,8 @@ class DeviceWithUser {
 
 class UserPermissionInfo {
   final Rabbi rabbi;
-  final String? specificPath;
-  UserPermissionInfo({required this.rabbi, this.specificPath});
+  final List<String?> specificPaths;
+  UserPermissionInfo({required this.rabbi, required this.specificPaths});
 }
 
 LazyDatabase _openConnection() {

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart' as drift;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -38,10 +40,13 @@ class UserManagementTab extends ConsumerWidget {
               margin: const EdgeInsets.symmetric(vertical: 4),
               child: ListTile(
                 leading: const Icon(Icons.person),
-                title: Text(user.name,
-                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                title: Text(
+                  user.name,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
                 subtitle: Text(subtitleText),
-                isThreeLine: user.additionalInfo != null &&
+                isThreeLine:
+                    user.additionalInfo != null &&
                     user.additionalInfo!.isNotEmpty,
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -50,7 +55,8 @@ class UserManagementTab extends ConsumerWidget {
                       child: const Text('הרשאות'),
                       onPressed: () {
                         logService.logUserActivity(
-                            'Admin opened permissions dialog for user: ${user.name}');
+                          'Admin opened permissions dialog for user: ${user.name}',
+                        );
                         _showPermissionsDialog(context, ref, user);
                       },
                     ),
@@ -59,26 +65,40 @@ class UserManagementTab extends ConsumerWidget {
                       color: Theme.of(context).colorScheme.error,
                       tooltip: 'מחק משתמש',
                       onPressed: () => _showDeleteConfirmation(
-                          context, 'משתמש', user.name, () async {
-                        try {
-                          await ref.read(databaseProvider).deleteUser(user.id);
-                          logService.logUserActivity(
-                              'Admin deleted user: ${user.name} (ID: ${user.id})');
-                        } catch (e, st) {
-                          logService.logError(
-                              'Failed to delete user: ${user.name}', e, st);
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                content: Text('שגיאה במחיקת משתמש: $e')));
+                        context,
+                        'משתמש',
+                        user.name,
+                        () async {
+                          try {
+                            await ref
+                                .read(databaseProvider)
+                                .deleteUser(user.id);
+                            logService.logUserActivity(
+                              'Admin deleted user: ${user.name} (ID: ${user.id})',
+                            );
+                          } catch (e, st) {
+                            logService.logError(
+                              'Failed to delete user: ${user.name}',
+                              e,
+                              st,
+                            );
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('שגיאה במחיקת משתמש: $e'),
+                                ),
+                              );
+                            }
                           }
-                        }
-                      }),
+                        },
+                      ),
                     ),
                   ],
                 ),
                 onTap: () {
                   logService.logUserActivity(
-                      'Admin opened "Edit User" dialog for user: ${user.name}');
+                    'Admin opened "Edit User" dialog for user: ${user.name}',
+                  );
                   _showUserDialog(context, ref, user: user);
                 },
               ),
@@ -96,8 +116,9 @@ class UserManagementTab extends ConsumerWidget {
 
   void _showUserDialog(BuildContext context, WidgetRef ref, {User? user}) {
     final nameController = TextEditingController(text: user?.name);
-    final additionalInfoController =
-        TextEditingController(text: user?.additionalInfo);
+    final additionalInfoController = TextEditingController(
+      text: user?.additionalInfo,
+    );
     final formKey = GlobalKey<FormState>();
     final logService = ref.read(logServiceProvider);
 
@@ -114,7 +135,9 @@ class UserManagementTab extends ConsumerWidget {
                 TextFormField(
                   controller: nameController,
                   decoration: const InputDecoration(
-                      labelText: 'שם משתמש', border: OutlineInputBorder()),
+                    labelText: 'שם משתמש',
+                    border: OutlineInputBorder(),
+                  ),
                   validator: (v) => v!.isEmpty ? 'שדה חובה' : null,
                   textAlign: TextAlign.start,
                 ),
@@ -122,8 +145,9 @@ class UserManagementTab extends ConsumerWidget {
                 TextFormField(
                   controller: additionalInfoController,
                   decoration: const InputDecoration(
-                      labelText: 'פרטים נוספים (טלפון, שיעור, ועד וכו\')',
-                      border: OutlineInputBorder()),
+                    labelText: 'פרטים נוספים (טלפון, שיעור, ועד וכו\')',
+                    border: OutlineInputBorder(),
+                  ),
                   textAlign: TextAlign.start,
                   minLines: 3,
                   maxLines: 5,
@@ -142,9 +166,10 @@ class UserManagementTab extends ConsumerWidget {
                   final companion = UsersCompanion(
                     name: drift.Value(nameController.text),
                     additionalInfo: drift.Value(
-                        additionalInfoController.text.trim().isEmpty
-                            ? null
-                            : additionalInfoController.text.trim()),
+                      additionalInfoController.text.trim().isEmpty
+                          ? null
+                          : additionalInfoController.text.trim(),
+                    ),
                   );
                   try {
                     if (user == null) {
@@ -152,23 +177,31 @@ class UserManagementTab extends ConsumerWidget {
                           .read(databaseProvider)
                           .insertUser(companion);
                       logService.logUserActivity(
-                          'Admin added new user: ${nameController.text} (ID: $newUserId)');
+                        'Admin added new user: ${nameController.text} (ID: $newUserId)',
+                      );
                     } else {
-                      await ref.read(databaseProvider).updateUser(
+                      await ref
+                          .read(databaseProvider)
+                          .updateUser(
                             companion.copyWith(id: drift.Value(user.id)),
                           );
                       logService.logUserActivity(
-                          'Admin updated user: ${user.name} (ID: ${user.id}) to ${nameController.text}');
+                        'Admin updated user: ${user.name} (ID: ${user.id}) to ${nameController.text}',
+                      );
                     }
                     if (context.mounted) {
                       Navigator.of(context).pop();
                     }
                   } catch (e, st) {
                     logService.logError(
-                        'Failed to save user: ${nameController.text}', e, st);
+                      'Failed to save user: ${nameController.text}',
+                      e,
+                      st,
+                    );
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('שגיאה בשמירת משתמש: $e')));
+                        SnackBar(content: Text('שגיאה בשמירת משתמש: $e')),
+                      );
                     }
                   }
                 }
@@ -184,18 +217,24 @@ class UserManagementTab extends ConsumerWidget {
   void _showPermissionsDialog(BuildContext context, WidgetRef ref, User user) {
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) => _PermissionsDialog(user: user),
     );
   }
 
-  void _showDeleteConfirmation(BuildContext context, String itemType,
-      String itemName, VoidCallback onDelete) {
+  void _showDeleteConfirmation(
+    BuildContext context,
+    String itemType,
+    String itemName,
+    VoidCallback onDelete,
+  ) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('אישור מחיקה'),
-        content:
-            Text('האם למחוק את ה$itemType "$itemName"?\nפעולה זו אינה הפיכה.'),
+        content: Text(
+          'האם למחוק את ה$itemType "$itemName"?\nפעולה זו אינה הפיכה.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
@@ -228,7 +267,7 @@ class _PermissionsDialog extends ConsumerStatefulWidget {
 
 class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
   Set<int> _selectedRabbiIds = {};
-  Map<int, TextEditingController> _pathControllers = {};
+  Map<int, List<TextEditingController>> _pathControllers = {};
   bool _isLoading = true;
   late final LogService _logService;
 
@@ -241,27 +280,42 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
 
   @override
   void dispose() {
-    for (var controller in _pathControllers.values) {
-      controller.dispose();
+    for (var controllerList in _pathControllers.values) {
+      for (var controller in controllerList) {
+        controller.dispose();
+      }
     }
     super.dispose();
   }
 
   Future<void> _loadInitialPermissions() async {
-    _logService
-        .logInfo('Loading initial permissions for user: ${widget.user.name}');
+    _logService.logInfo(
+      'Loading initial permissions for user: ${widget.user.name}',
+    );
     try {
       final initialPermissions = await ref
           .read(databaseProvider)
           .getPermissionsForUser(widget.user.id);
+
       if (mounted) {
         final newSelectedIds = <int>{};
-        final newControllers = <int, TextEditingController>{};
+        final newControllers = <int, List<TextEditingController>>{};
+
         for (final p in initialPermissions) {
           newSelectedIds.add(p.rabbiId);
-
-          newControllers[p.rabbiId] =
-              TextEditingController(text: p.specificPath);
+          final rawPathData = p.specificPath;
+          List<String?> paths = [];
+          if (rawPathData != null && rawPathData.isNotEmpty) {
+            try {
+              final decoded = json.decode(rawPathData) as List;
+              paths = decoded.map((e) => e as String?).toList();
+            } catch (e) {
+              paths.add(rawPathData);
+            }
+          }
+          newControllers[p.rabbiId] = paths
+              .map((path) => TextEditingController(text: path))
+              .toList();
         }
         setState(() {
           _selectedRabbiIds = newSelectedIds;
@@ -269,24 +323,41 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
           _isLoading = false;
         });
         _logService.logInfo(
-            'Initial permissions loaded successfully for user: ${widget.user.name}');
+          'Initial permissions loaded successfully for user: ${widget.user.name}',
+        );
       }
     } catch (e, st) {
       _logService.logError(
-          'Failed to load initial permissions for user: ${widget.user.name}',
-          e,
-          st);
+        'Failed to load initial permissions for user: ${widget.user.name}',
+        e,
+        st,
+      );
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('שגיאה בטעינת הרשאות: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('שגיאה בטעינת הרשאות: $e')));
         setState(() => _isLoading = false);
       }
     }
   }
 
-  Future<void> _pickSpecificPath(Rabbi rabbi) async {
+  void _addPathController(int rabbiId) {
+    setState(() {
+      _pathControllers[rabbiId]!.add(TextEditingController());
+    });
+  }
+
+  void _removePathController(int rabbiId, int index) {
+    setState(() {
+      _pathControllers[rabbiId]![index].dispose();
+      _pathControllers[rabbiId]!.removeAt(index);
+    });
+  }
+
+  Future<void> _pickSpecificPath(Rabbi rabbi, int pathIndex) async {
     _logService.logUserActivity(
-        'Admin picking specific path for rabbi: ${rabbi.name}');
+      'Admin picking specific path for rabbi: ${rabbi.name}',
+    );
     final initialDirectory = rabbi.targetPath;
 
     String? selectedDirectory = await FilePicker.platform.getDirectoryPath(
@@ -299,17 +370,20 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
       if (!selectedDirectory.startsWith(initialDirectory)) {
         if (mounted) {
           _logService.logWarning(
-              'Selected directory ($selectedDirectory) is not within rabbi\'s base path ($initialDirectory).');
+            'Selected directory ($selectedDirectory) is not within rabbi\'s base path ($initialDirectory).',
+          );
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-                content: Text('יש לבחור תיקיה בתוך תיקיית הרב המוגדרת.')),
+              content: Text('יש לבחור תיקיה בתוך תיקיית הרב המוגדרת.'),
+            ),
           );
         }
         return;
       }
 
-      String relativePath =
-          selectedDirectory.substring(initialDirectory.length);
+      String relativePath = selectedDirectory.substring(
+        initialDirectory.length,
+      );
 
       relativePath = relativePath.replaceAll(r'\', '/');
       if (relativePath.startsWith('/')) {
@@ -321,8 +395,10 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
 
       if (mounted) {
         _logService.logInfo(
-            'Selected relative path for rabbi ${rabbi.name}: $relativePath');
-        _pathControllers[rabbi.id]?.text = relativePath;
+          'Selected relative path for rabbi ${rabbi.name}: $relativePath',
+        );
+        _pathControllers[rabbi.id]?[pathIndex].text = relativePath;
+        setState(() {});
       }
     } else {
       _logService.logInfo('Directory picker for specific path cancelled.');
@@ -344,50 +420,122 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
                   children: rabbis.map<Widget>((rabbi) {
                     final isSelected = _selectedRabbiIds.contains(rabbi.id);
 
-                    _pathControllers.putIfAbsent(
-                        rabbi.id, () => TextEditingController());
+                    if (isSelected && _pathControllers[rabbi.id] == null) {
+                      _pathControllers[rabbi.id] = [];
+                    }
+
                     return Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         CheckboxListTile(
                           value: isSelected,
                           title: Text(rabbi.name),
-                          subtitle: Text('נתיב בסיס: ${rabbi.targetPath}',
-                              textDirection: TextDirection.ltr,
-                              textAlign: TextAlign.right),
+                          subtitle: Text(
+                            'נתיב בסיס: ${rabbi.targetPath}',
+                            textDirection: TextDirection.ltr,
+                            textAlign: TextAlign.right,
+                          ),
                           controlAffinity: ListTileControlAffinity.leading,
                           onChanged: (checked) {
                             setState(() {
                               if (checked == true) {
                                 _selectedRabbiIds.add(rabbi.id);
+                                _pathControllers[rabbi.id] = [];
                                 _logService.logInfo(
-                                    'Admin selected rabbi ${rabbi.name} for user ${widget.user.name}.');
+                                  'Admin selected rabbi ${rabbi.name} for user ${widget.user.name}.',
+                                );
                               } else {
                                 _selectedRabbiIds.remove(rabbi.id);
-                                _pathControllers.remove(rabbi.id)?.dispose();
+                                _pathControllers
+                                    .remove(rabbi.id)
+                                    ?.forEach((c) => c.dispose());
+                                _pathControllers.remove(rabbi.id);
                                 _logService.logInfo(
-                                    'Admin deselected rabbi ${rabbi.name} for user ${widget.user.name}.');
+                                  'Admin deselected rabbi ${rabbi.name} for user ${widget.user.name}.',
+                                );
                               }
                             });
                           },
                         ),
                         if (isSelected)
                           Padding(
-                            padding:
-                                const EdgeInsets.fromLTRB(16.0, 0, 16.0, 16.0),
-                            child: TextFormField(
-                              controller: _pathControllers[rabbi.id],
-                              decoration: InputDecoration(
-                                labelText: 'הגבלת תיקיה (אופציונלי)',
-                                hintText: 'לדוגמה: תשפ״ד/שיעורים',
-                                border: const OutlineInputBorder(),
-                                suffixIcon: IconButton(
-                                  icon: const Icon(Icons.folder_open),
-                                  onPressed: () => _pickSpecificPath(rabbi),
-                                  tooltip: 'בחר תיקיה מתוך תיקיית הרב',
+                            padding: const EdgeInsets.fromLTRB(
+                              16.0,
+                              0,
+                              16.0,
+                              8.0,
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (_pathControllers[rabbi.id]!.isEmpty)
+                                  const Padding(
+                                    padding: EdgeInsets.symmetric(
+                                      vertical: 8.0,
+                                    ),
+                                    child: Text(
+                                      'למשתמש תהיה גישה לכל תיקיית הבסיס של הרב.',
+                                      style: TextStyle(
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                    ),
+                                  ),
+                                ..._pathControllers[rabbi.id]!
+                                    .asMap()
+                                    .entries
+                                    .map((entry) {
+                                      int idx = entry.key;
+                                      TextEditingController controller =
+                                          entry.value;
+                                      return Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 4.0,
+                                        ),
+                                        child: TextFormField(
+                                          controller: controller,
+                                          decoration: InputDecoration(
+                                            labelText: 'נתיב משנה ${idx + 1}',
+                                            hintText: 'לדוגמה: תשפ״ד/שיעורים',
+                                            border: const OutlineInputBorder(),
+                                            suffixIcon: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                IconButton(
+                                                  icon: const Icon(
+                                                    Icons.folder_open,
+                                                  ),
+                                                  onPressed: () =>
+                                                      _pickSpecificPath(
+                                                        rabbi,
+                                                        idx,
+                                                      ),
+                                                  tooltip:
+                                                      'בחר תיקיה מתוך תיקיית הרב',
+                                                ),
+                                                IconButton(
+                                                  icon: const Icon(
+                                                    Icons.delete_outline,
+                                                  ),
+                                                  onPressed: () =>
+                                                      _removePathController(
+                                                        rabbi.id,
+                                                        idx,
+                                                      ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          textAlign: TextAlign.start,
+                                        ),
+                                      );
+                                    }),
+                                const SizedBox(height: 8),
+                                OutlinedButton.icon(
+                                  onPressed: () => _addPathController(rabbi.id),
+                                  icon: const Icon(Icons.add),
+                                  label: const Text('הוסף הגבלת תיקיה'),
                                 ),
-                              ),
-                              textAlign: TextAlign.start,
+                              ],
                             ),
                           ),
                       ],
@@ -397,7 +545,10 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (e, st) {
                   _logService.logError(
-                      'Error loading rabbis for permissions dialog', e, st);
+                    'Error loading rabbis for permissions dialog',
+                    e,
+                    st,
+                  );
                   return Center(child: Text('שגיאה בטעינת רבנים: $e'));
                 },
               ),
@@ -406,7 +557,8 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
         TextButton(
           onPressed: () {
             _logService.logUserActivity(
-                'Admin cancelled permissions dialog for user: ${widget.user.name}.');
+              'Admin cancelled permissions dialog for user: ${widget.user.name}.',
+            );
             Navigator.of(context).pop();
           },
           child: const Text('ביטול'),
@@ -416,31 +568,36 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
               ? null
               : () async {
                   setState(() => _isLoading = true);
-                  final permissionsToSet = <int, String?>{};
+                  final permissionsToSet = <int, List<String?>>{};
                   for (final rabbiId in _selectedRabbiIds) {
-                    final path = _pathControllers[rabbiId]?.text.trim();
-
-                    permissionsToSet[rabbiId] =
-                        (path != null && path.isNotEmpty) ? path : null;
+                    final controllers = _pathControllers[rabbiId]!;
+                    permissionsToSet[rabbiId] = controllers
+                        .map((c) => c.text)
+                        .toList();
                   }
                   try {
-                    await ref.read(databaseProvider).setPermissionsForUser(
+                    await ref
+                        .read(databaseProvider)
+                        .setPermissionsForUser(
                           widget.user.id,
                           permissionsToSet,
                         );
                     _logService.logUserActivity(
-                        'Admin set permissions for user ${widget.user.name} (ID: ${widget.user.id}). Permissions: $permissionsToSet');
+                      'Admin set permissions for user ${widget.user.name} (ID: ${widget.user.id}). Permissions: $permissionsToSet',
+                    );
                     if (mounted) {
                       Navigator.of(context).pop();
                     }
                   } catch (e, st) {
                     _logService.logError(
-                        'Failed to set permissions for user: ${widget.user.name}',
-                        e,
-                        st);
+                      'Failed to set permissions for user: ${widget.user.name}',
+                      e,
+                      st,
+                    );
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('שגיאה בשמירת הרשאות: $e')));
+                        SnackBar(content: Text('שגיאה בשמירת הרשאות: $e')),
+                      );
                       setState(() => _isLoading = false);
                     }
                   }

@@ -26,6 +26,7 @@ class TransferDetailsPanel extends ConsumerStatefulWidget {
 
 class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
   UserPermissionInfo? _selectedPermission;
+  String? _selectedSpecificPath;
   JewishDate _selectedDate = JewishDate();
   final _topicController = TextEditingController();
   bool _isCopying = false;
@@ -80,6 +81,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
     _logService.logInfo('Resetting transfer form.');
     setState(() {
       _selectedPermission = null;
+      _selectedSpecificPath = null;
       _topicController.clear();
       _selectedDate = JewishDate();
     });
@@ -107,13 +109,13 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
   Future<String> _determineFinalFileName() async {
     if (_selectedPermission == null || widget.selectedFile == null) {
       _logService.logError(
-          "Cannot determine final filename, selection is incomplete.",
-          null,
-          StackTrace.current);
+        "Cannot determine final filename, selection is incomplete.",
+        null,
+        StackTrace.current,
+      );
       throw Exception("Cannot determine filename, selection is incomplete.");
     }
 
-    // 1. Get base info for filename
     final formatter = HebrewDateFormatter()
       ..hebrewFormat = true
       ..useGershGershayim = false;
@@ -125,22 +127,17 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
         : p.extension(widget.selectedFile!.path);
     final rabbiName = _selectedPermission!.rabbi.name;
 
-    // 2. Determine destination directory
     final baseDirectory = _selectedPermission!.rabbi.targetPath;
-    final subDirectory = _selectedPermission!.specificPath;
     final destinationDirectory =
-        (subDirectory != null && subDirectory.isNotEmpty)
-            ? p.join(baseDirectory, subDirectory)
-            : baseDirectory;
+        (_selectedSpecificPath != null && _selectedSpecificPath!.isNotEmpty)
+        ? p.join(baseDirectory, _selectedSpecificPath!)
+        : baseDirectory;
 
-    // 3. Find next sequential number based on ALL files in the directory
     int nextNumber = 1;
     try {
       final dir = Directory(destinationDirectory);
       if (await dir.exists()) {
         int maxNumber = 0;
-        // This regex finds any file starting with a number and a hyphen,
-        // making the numbering global to the folder, regardless of date.
         final regex = RegExp(r'^(\d+)\s*-');
 
         await for (final entity in dir.list()) {
@@ -159,16 +156,17 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       }
     } catch (e, st) {
       _logService.logError(
-          "Error determining next file number in '$destinationDirectory'. Defaulting to 1.",
-          e,
-          st);
-      nextNumber = 1; // Fallback on error
+        "Error determining next file number in '$destinationDirectory'. Defaulting to 1.",
+        e,
+        st,
+      );
+      nextNumber = 1;
     }
 
-    _logService
-        .logInfo("Determined next file number in folder is $nextNumber.");
+    _logService.logInfo(
+      "Determined next file number in folder is $nextNumber.",
+    );
 
-    // 4. Format and assemble final name
     final formattedNumber = nextNumber.toString().padLeft(2, '0');
     final finalFileName =
         '$formattedNumber - $dateStr - $rabbiName${sanitizedTopic.isNotEmpty ? ' - $sanitizedTopic' : ''}$extension';
@@ -178,7 +176,9 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
   }
 
   Future<void> _showPostCopyOptionsDialog(
-      File sourceFile, String newFileName) async {
+    File sourceFile,
+    String newFileName,
+  ) async {
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     final theme = Theme.of(context);
 
@@ -202,8 +202,10 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
               const SizedBox(height: 8),
               Text(
                 newFileName,
-                style:
-                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
               ),
               const SizedBox(height: 16),
               const Text("מה ברצונך לעשות עם קובץ המקור?"),
@@ -225,7 +227,8 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
                 try {
                   await sourceFile.delete();
                   _logService.logUserActivity(
-                      "Source file ${sourceFile.path} deleted successfully by user request.");
+                    "Source file ${sourceFile.path} deleted successfully by user request.",
+                  );
                   scaffoldMessenger.showSnackBar(
                     const SnackBar(
                       content: Text("קובץ המקור נמחק בהצלחה."),
@@ -234,7 +237,10 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
                   );
                 } catch (e, st) {
                   _logService.logError(
-                      "Failed to delete source file ${sourceFile.path}", e, st);
+                    "Failed to delete source file ${sourceFile.path}",
+                    e,
+                    st,
+                  );
                   scaffoldMessenger.showSnackBar(
                     SnackBar(
                       content: Text("שגיאה במחיקת קובץ המקור: $e"),
@@ -258,7 +264,19 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
         _selectedPermission == null ||
         _appSettings == null) {
       _logService.logWarning(
-          'Attempted to copy file with missing selections (file, permission, or settings).');
+        'Attempted to copy file with missing selections (file, permission, or settings).',
+      );
+      return;
+    }
+
+    if (_selectedPermission!.specificPaths.length > 1 &&
+        _selectedSpecificPath == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('יש לבחור תיקיית משנה ליעד'),
+          backgroundColor: Colors.orange,
+        ),
+      );
       return;
     }
 
@@ -270,23 +288,24 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
     final sourceFile = widget.selectedFile!;
 
     _logService.logUserActivity(
-        'User initiating file transfer for: ${sourceFile.path}');
+      'User initiating file transfer for: ${sourceFile.path}',
+    );
 
     try {
       final newFileName = await _determineFinalFileName();
       final baseDirectory = _selectedPermission!.rabbi.targetPath;
-      final subDirectory = _selectedPermission!.specificPath;
 
       final destinationDirectory =
-          (subDirectory != null && subDirectory.isNotEmpty)
-              ? p.join(baseDirectory, subDirectory)
-              : baseDirectory;
+          (_selectedSpecificPath != null && _selectedSpecificPath!.isNotEmpty)
+          ? p.join(baseDirectory, _selectedSpecificPath!)
+          : baseDirectory;
 
       final destinationPath = p.join(destinationDirectory, newFileName);
       final fileService = ref.read(fileServiceProvider);
 
       _logService.logInfo(
-          'Copying/converting file from ${sourceFile.path} to $destinationPath (Convert to MP3: ${_appSettings!.convertToMp3})');
+        'Copying/converting file from ${sourceFile.path} to $destinationPath (Convert to MP3: ${_appSettings!.convertToMp3})',
+      );
       if (_appSettings!.convertToMp3) {
         await fileService.convertAndCopyFile(
           sourceFile: sourceFile,
@@ -304,7 +323,9 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
 
       await authState.maybeWhen(
         user: (user, device, mountPath) async {
-          await ref.read(databaseProvider).logTransfer(
+          await ref
+              .read(databaseProvider)
+              .logTransfer(
                 TransfersCompanion.insert(
                   userId: user.id,
                   sourceFile: sourceFile.path,
@@ -313,11 +334,13 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
                 ),
               );
           _logService.logUserActivity(
-              'Transfer logged for user ${user.name}: Source ${sourceFile.path}, Destination: $destinationPath');
+            'Transfer logged for user ${user.name}: Source ${sourceFile.path}, Destination: $destinationPath',
+          );
         },
         orElse: () {
           _logService.logInfo(
-              'Transfer completed but no user active to log to DB. Source: ${sourceFile.path}, Destination: $destinationPath');
+            'Transfer completed but no user active to log to DB. Source: ${sourceFile.path}, Destination: $destinationPath',
+          );
         },
       );
 
@@ -326,7 +349,10 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       await _showPostCopyOptionsDialog(sourceFile, newFileName);
     } catch (e, st) {
       _logService.logError(
-          'Error during file transfer from ${sourceFile.path}', e, st);
+        'Error during file transfer from ${sourceFile.path}',
+        e,
+        st,
+      );
       scaffoldMessenger.showSnackBar(
         SnackBar(
           content: Text('שגיאה בהעתקת הקובץ: $e'),
@@ -342,20 +368,19 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
 
   Future<void> _pickHebrewDate() async {
     _logService.logUserActivity(
-        'User opened Hebrew date picker. Current date: ${_selectedDate.toString()}');
+      'User opened Hebrew date picker. Current date: ${_selectedDate.toString()}',
+    );
     final initial = _selectedDate.getGregorianCalendar();
 
     final currentJewishYear = JewishDate().getJewishYear();
-    final firstHebrew = (JewishDate()
-          ..setJewishDate(currentJewishYear - 30, JewishDate.TISHREI, 1))
-        .getGregorianCalendar();
-    final lastHebrew = (JewishDate()
-          ..setJewishDate(
-            currentJewishYear + 50,
-            JewishDate.ELUL,
-            29,
-          ))
-        .getGregorianCalendar();
+    final firstHebrew =
+        (JewishDate()
+              ..setJewishDate(currentJewishYear - 30, JewishDate.TISHREI, 1))
+            .getGregorianCalendar();
+    final lastHebrew =
+        (JewishDate()
+              ..setJewishDate(currentJewishYear + 50, JewishDate.ELUL, 29))
+            .getGregorianCalendar();
 
     final DateTime? picked = await showMaterialHebrewDatePicker(
       context: context,
@@ -402,9 +427,11 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
                       onPressed: () {
                         _topicController.text += key;
                         _topicController.selection = TextSelection.fromPosition(
-                            TextPosition(offset: _topicController.text.length));
+                          TextPosition(offset: _topicController.text.length),
+                        );
                         _logService.logInfo(
-                            'Hebrew keyboard input: "$key", current topic: "${_topicController.text}"');
+                          'Hebrew keyboard input: "$key", current topic: "${_topicController.text}"',
+                        );
                       },
                       child: Text(key, style: keyTextStyle),
                     ),
@@ -424,17 +451,22 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
                   child: ElevatedButton(
                     style: buttonStyle.copyWith(
                       padding: WidgetStateProperty.all(
-                          const EdgeInsets.symmetric(vertical: 16)),
+                        const EdgeInsets.symmetric(vertical: 16),
+                      ),
                     ),
                     onPressed: () {
                       final text = _topicController.text;
                       if (text.isNotEmpty) {
-                        _topicController.text =
-                            text.substring(0, text.length - 1);
+                        _topicController.text = text.substring(
+                          0,
+                          text.length - 1,
+                        );
                         _topicController.selection = TextSelection.fromPosition(
-                            TextPosition(offset: _topicController.text.length));
+                          TextPosition(offset: _topicController.text.length),
+                        );
                         _logService.logInfo(
-                            'Hebrew keyboard backspace, current topic: "${_topicController.text}"');
+                          'Hebrew keyboard backspace, current topic: "${_topicController.text}"',
+                        );
                       }
                     },
                     child: const Icon(Icons.backspace_outlined, size: 22),
@@ -450,7 +482,8 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
                     onPressed: () {
                       _topicController.text += ' ';
                       _logService.logInfo(
-                          'Hebrew keyboard space, current topic: "${_topicController.text}"');
+                        'Hebrew keyboard space, current topic: "${_topicController.text}"',
+                      );
                     },
                     icon: const Icon(Icons.space_bar),
                     label: const Text('רווח', style: TextStyle(fontSize: 16)),
@@ -486,8 +519,13 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
           child: AnimatedOpacity(
             duration: const Duration(milliseconds: 300),
             opacity: _isCopying ? 0.5 : 1.0,
-            child: _buildFormContent(theme, allowedRabbisAsync, buttonColor,
-                buttonTextColor, lastCopiedFileName),
+            child: _buildFormContent(
+              theme,
+              allowedRabbisAsync,
+              buttonColor,
+              buttonTextColor,
+              lastCopiedFileName,
+            ),
           ),
         ),
       ),
@@ -495,11 +533,12 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
   }
 
   Widget _buildFormContent(
-      ThemeData theme,
-      AsyncValue<List<UserPermissionInfo>> allowedRabbisAsync,
-      Color buttonColor,
-      Color buttonTextColor,
-      String? lastCopiedFileName) {
+    ThemeData theme,
+    AsyncValue<List<UserPermissionInfo>> allowedRabbisAsync,
+    Color buttonColor,
+    Color buttonTextColor,
+    String? lastCopiedFileName,
+  ) {
     if (widget.selectedFile == null) {
       return Center(
         child: (lastCopiedFileName != null)
@@ -510,12 +549,18 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.check_circle,
-                          color: Colors.green, size: 48),
+                      const Icon(
+                        Icons.check_circle,
+                        color: Colors.green,
+                        size: 48,
+                      ),
                       const SizedBox(height: 16),
-                      Text('העתקה הושלמה!',
-                          style: theme.textTheme.titleLarge
-                              ?.copyWith(color: Colors.green.shade800)),
+                      Text(
+                        'העתקה הושלמה!',
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          color: Colors.green.shade800,
+                        ),
+                      ),
                       const SizedBox(height: 8),
                       Text(lastCopiedFileName, textAlign: TextAlign.center),
                       const SizedBox(height: 24),
@@ -527,8 +572,11 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
             : Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.arrow_forward,
-                      size: 48, color: theme.disabledColor),
+                  Icon(
+                    Icons.arrow_forward,
+                    size: 48,
+                    color: theme.disabledColor,
+                  ),
                   const SizedBox(height: 16),
                   Text(
                     'בחר קובץ מהרשימה כדי להתחיל',
@@ -538,6 +586,10 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
               ),
       );
     }
+
+    bool showPathSelector =
+        _selectedPermission != null &&
+        _selectedPermission!.specificPaths.length > 1;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -559,33 +611,79 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
                 allowedRabbisAsync.when(
                   data: (permissions) =>
                       DropdownButtonFormField<UserPermissionInfo>(
-                    value: _selectedPermission,
-                    items: permissions
-                        .map((p) => DropdownMenuItem(
-                            value: p, child: Text(p.rabbi.name)))
-                        .toList(),
-                    onChanged: (val) {
-                      setState(() => _selectedPermission = val);
-                      _logService.logUserActivity(
-                          'User selected rabbi: ${val?.rabbi.name}');
-                    },
-                    decoration: const InputDecoration(
-                        labelText: 'בחר רב', border: OutlineInputBorder()),
-                  ),
+                        value: _selectedPermission,
+                        items: permissions
+                            .map(
+                              (p) => DropdownMenuItem(
+                                value: p,
+                                child: Text(p.rabbi.name),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (val) {
+                          setState(() {
+                            _selectedPermission = val;
+                            if (val != null) {
+                              if (val.specificPaths.length == 1) {
+                                _selectedSpecificPath = val.specificPaths.first;
+                              } else {
+                                _selectedSpecificPath = null;
+                              }
+                            } else {
+                              _selectedSpecificPath = null;
+                            }
+                          });
+                          _logService.logUserActivity(
+                            'User selected rabbi: ${val?.rabbi.name}',
+                          );
+                        },
+                        decoration: const InputDecoration(
+                          labelText: 'בחר רב',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
                   loading: () =>
                       const Center(child: CircularProgressIndicator()),
                   error: (err, stack) {
                     _logService.logError(
-                        'Error loading allowed rabbis', err, stack);
+                      'Error loading allowed rabbis',
+                      err,
+                      stack,
+                    );
                     return Text('שגיאה: $err');
                   },
                 ),
+                if (showPathSelector) ...[
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String?>(
+                    value: _selectedSpecificPath,
+                    items: _selectedPermission!.specificPaths
+                        .map(
+                          (path) => DropdownMenuItem(
+                            value: path,
+                            child: Text(path ?? 'תיקיית הבסיס'),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (val) {
+                      setState(() => _selectedSpecificPath = val);
+                      _logService.logUserActivity(
+                        'User selected specific path: $val',
+                      );
+                    },
+                    decoration: const InputDecoration(
+                      labelText: 'בחר תיקיית משנה ליעד',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 TextField(
                   controller: _topicController,
                   decoration: const InputDecoration(
-                      labelText: 'נושא השיעור (אופציונלי)',
-                      border: OutlineInputBorder()),
+                    labelText: 'נושא השיעור (אופציונלי)',
+                    border: OutlineInputBorder(),
+                  ),
                   onChanged: (_) => setState(() {}),
                   textDirection: TextDirection.rtl,
                   textAlign: TextAlign.start,
@@ -594,10 +692,12 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   shape: RoundedRectangleBorder(
-                      side: BorderSide(color: theme.disabledColor),
-                      borderRadius: BorderRadius.circular(8)),
+                    side: BorderSide(color: theme.disabledColor),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                   title: Text(
-                      'תאריך השיעור: ${(HebrewDateFormatter()..hebrewFormat = true).format(_selectedDate)}'),
+                    'תאריך השיעור: ${(HebrewDateFormatter()..hebrewFormat = true).format(_selectedDate)}',
+                  ),
                   trailing: const Icon(Icons.calendar_today),
                   onTap: _pickHebrewDate,
                 ),
@@ -608,8 +708,9 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
                 const SizedBox(height: 4),
                 SelectableText(
                   _getNewFileName(),
-                  style: theme.textTheme.bodyMedium
-                      ?.copyWith(color: theme.colorScheme.secondary),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.secondary,
+                  ),
                   maxLines: 2,
                 ),
               ],
@@ -623,7 +724,10 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
                   width: 20,
                   height: 20,
                   child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Colors.white))
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
               : const Icon(Icons.copy_all_outlined),
           label: const Text('העתק את השיעור'),
           style: ElevatedButton.styleFrom(
@@ -631,8 +735,9 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
             backgroundColor: theme.colorScheme.primary,
             foregroundColor: theme.colorScheme.onPrimary,
             textStyle: theme.textTheme.titleMedium?.copyWith(
-                color: theme.colorScheme.onPrimary,
-                fontWeight: FontWeight.bold),
+              color: theme.colorScheme.onPrimary,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           onPressed: _selectedPermission == null ? null : _copyFile,
         ),
