@@ -37,7 +37,9 @@ class MyApp extends ConsumerWidget {
   static const Color accentGold = Color(0xFFB89B72);
   static const Color parchmentBackground = Color(0xFFF9F6F2);
   static const Color inkBrownText = Color(0xFF3C3631);
-  static const Color darkBackground = Color(0xFF2E2823); // רקע כהה עוד יותר לרצינות
+  static const Color darkBackground = Color(
+    0xFF2E2823,
+  ); // רקע כהה עוד יותר לרצינות
   static const Color darkSurface = Color(0xFF4A433D);
 
   @override
@@ -56,8 +58,6 @@ class MyApp extends ConsumerWidget {
         onSecondary: Colors.white,
         error: Colors.red,
         onError: Colors.white,
-        background: parchmentBackground,
-        onBackground: inkBrownText,
         surface: parchmentBackground, // רקע לקלפים ודיאלוגים
         onSurface: inkBrownText, // טקסט על קלפים ודיאלוגים
       ),
@@ -74,10 +74,9 @@ class MyApp extends ConsumerWidget {
         ),
       ),
       // התאמות נוספות לקריאות ונוחות
-      textTheme: Theme.of(context).textTheme.apply(
-        bodyColor: inkBrownText,
-        displayColor: inkBrownText,
-      ),
+      textTheme: Theme.of(
+        context,
+      ).textTheme.apply(bodyColor: inkBrownText, displayColor: inkBrownText),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: accentGold,
@@ -99,8 +98,6 @@ class MyApp extends ConsumerWidget {
         onSecondary: inkBrownText,
         error: Colors.redAccent,
         onError: Colors.white,
-        background: darkBackground,
-        onBackground: parchmentBackground,
         surface: darkSurface, // משטח מעט בהיר יותר ליצירת עומק
         onSurface: parchmentBackground, // טקסט על המשטח
       ),
@@ -116,7 +113,7 @@ class MyApp extends ConsumerWidget {
           fontWeight: FontWeight.w600,
         ),
       ),
-       elevatedButtonTheme: ElevatedButtonThemeData(
+      elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: accentGold,
           foregroundColor: inkBrownText,
