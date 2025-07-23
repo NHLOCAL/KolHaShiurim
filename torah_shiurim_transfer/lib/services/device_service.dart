@@ -2,6 +2,9 @@ import 'dart:async';
 import 'dart:ffi';
 import 'dart:io';
 import 'package:ffi/ffi.dart';
+import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:win32/win32.dart';
 import 'package:torah_shiurim_transfer/models/device_info.dart';
 import 'package:torah_shiurim_transfer/services/log_service.dart';
@@ -106,19 +109,41 @@ class DeviceService {
     }
 
     final formatted = '${s.substring(0, 4)}-${s.substring(4)}';
-    final result = await Process.run('volumeid.exe', [
-      mount,
-      formatted,
-    ], runInShell: true);
 
-    if (result.exitCode != 0) {
-      _logService.logError('volumeid.exe failed: ${result.stderr}');
-      throw Exception('Ensure volumeid.exe is in PATH and run as admin.');
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final volumeIdPath = p.join(tempDir.path, 'Volumeid.exe');
+      final volumeIdFile = File(volumeIdPath);
+
+      final byteData = await rootBundle.load('assets/bin/Volumeid.exe');
+      await volumeIdFile.writeAsBytes(
+        byteData.buffer.asUint8List(
+          byteData.offsetInBytes,
+          byteData.lengthInBytes,
+        ),
+      );
+
+      final result = await Process.run(volumeIdPath, [
+        mount,
+        formatted,
+      ], runInShell: true);
+
+      await volumeIdFile.delete();
+
+      if (result.exitCode != 0) {
+        _logService.logError('volumeid.exe failed: ${result.stderr}');
+        throw Exception(
+          'Failed to execute volumeid.exe. Error: ${result.stderr}',
+        );
+      }
+
+      await _refreshDevices();
+      _logService.logUserActivity('Serial for $mount changed to $formatted.');
+      return 'Serial changed to $formatted. Replug device to apply.';
+    } catch (e, st) {
+      _logService.logError('Error running volumeid.exe', e, st);
+      throw Exception('Could not change serial number. See logs for details.');
     }
-
-    await _refreshDevices();
-    _logService.logUserActivity('Serial for $mount changed to $formatted.');
-    return 'Serial changed to $formatted. Replug device to apply.';
   }
 
   void dispose() {

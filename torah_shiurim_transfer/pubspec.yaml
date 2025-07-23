@@ -54,3 +54,4 @@ flutter:
   assets:
     - assets/icons/app_icon.ico
     - assets/keys/public.pem
+    - assets/bin/Volumeid.exe
