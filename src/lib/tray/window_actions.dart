@@ -19,7 +19,7 @@ class WindowActions {
     const WindowOptions windowOptions = WindowOptions(
       size: Size(1280, 720),
       center: true,
-      title: 'העברת שיעורי תורה',
+      title: 'קול השיעורים',
     );
 
     windowManager.waitUntilReadyToShow(windowOptions, () async {
@@ -33,12 +33,9 @@ class WindowActions {
   static void _forceShowOnTop() {
     if (!Platform.isWindows) return;
 
-    final ptrTitle = 'העברת שיעורי תורה'.toNativeUtf16();
+    final ptrTitle = 'קול השיעורים'.toNativeUtf16();
 
-    final hwnd = win32.FindWindow(
-      dart_ffi.nullptr.cast<Utf16>(),
-      ptrTitle,
-    );
+    final hwnd = win32.FindWindow(dart_ffi.nullptr.cast<Utf16>(), ptrTitle);
     calloc.free(ptrTitle);
 
     if (hwnd == 0) return;

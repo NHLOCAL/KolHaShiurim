@@ -11,20 +11,19 @@ class TrayInitializer with TrayListener {
     trayManager.addListener(this);
 
     await trayManager.setIcon('assets/icons/app_icon.ico');
-    await trayManager.setToolTip('העברת שיעורי תורה');
+    await trayManager.setToolTip('קול השיעורים');
 
-    final menu = Menu(items: [
-      MenuItem(
-        label: 'פתח פאנל ניהול',
-        onClick: (_) =>
-            _container.read(authStateProvider.notifier).loginAsAdmin(),
-      ),
-      MenuItem.separator(),
-      MenuItem(
-        label: 'יציאה',
-        onClick: (_) => WindowActions.exitApp(),
-      ),
-    ]);
+    final menu = Menu(
+      items: [
+        MenuItem(
+          label: 'פתח פאנל ניהול',
+          onClick: (_) =>
+              _container.read(authStateProvider.notifier).loginAsAdmin(),
+        ),
+        MenuItem.separator(),
+        MenuItem(label: 'יציאה', onClick: (_) => WindowActions.exitApp()),
+      ],
+    );
     await trayManager.setContextMenu(menu);
   }
 
