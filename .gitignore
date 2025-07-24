@@ -120,3 +120,4 @@ app.*.symbols
 repomix-output.md
 kol_hashiurim/assets/keys/private.pem
 *.lic
+/Output
