@@ -526,6 +526,7 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
                                             ),
                                           ),
                                           textAlign: TextAlign.start,
+                                          textDirection: TextDirection.ltr,
                                         ),
                                       );
                                     }),

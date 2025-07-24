@@ -98,12 +98,12 @@ class RabbiManagementTab extends ConsumerWidget {
               const SizedBox(height: 16),
               TextFormField(
                 controller: pathController,
-                readOnly: true,
                 decoration: InputDecoration(
                   labelText: 'נתיב יעד (במחשב)',
                   border: const OutlineInputBorder(),
-                  prefixIcon: IconButton(
+                  suffixIcon: IconButton(
                     icon: const Icon(Icons.folder_open),
+                    tooltip: 'בחר תיקיה',
                     onPressed: () async {
                       logService.logUserActivity(
                           'Admin picking target path for rabbi.');
@@ -120,6 +120,8 @@ class RabbiManagementTab extends ConsumerWidget {
                   ),
                 ),
                 validator: (v) => v!.isEmpty ? 'שדה חובה' : null,
+                textAlign: TextAlign.start,
+                textDirection: TextDirection.ltr,
               ),
             ],
           ),
