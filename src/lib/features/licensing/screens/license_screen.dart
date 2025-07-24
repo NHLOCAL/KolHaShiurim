@@ -269,7 +269,6 @@ class _LicenseScreenState extends ConsumerState<LicenseScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final titleStyle = Theme.of(context).textTheme.headlineSmall;
     return Scaffold(
       appBar: AppBar(title: const Text('הפעלת רישיון תוכנה')),
       body: Center(
@@ -278,16 +277,12 @@ class _LicenseScreenState extends ConsumerState<LicenseScreen> {
           child: ListView(
             padding: const EdgeInsets.all(24.0),
             children: [
-              Text("שלב 1: קבלת רישיון", style: titleStyle),
-              const SizedBox(height: 16),
               _buildAboutCard(context),
               const SizedBox(height: 16),
               _buildHardwareFingerprintCard(context),
               const SizedBox(height: 24),
               const Divider(),
               const SizedBox(height: 24),
-              Text("שלב 2: הפעלת התוכנה", style: titleStyle),
-              const SizedBox(height: 16),
               const Text(
                 'לאחר קבלת הרישיון, הדבק אותו כאן או טען את הקובץ.',
                 textAlign: TextAlign.center,
