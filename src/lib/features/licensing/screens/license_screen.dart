@@ -71,7 +71,7 @@ class _LicenseScreenState extends ConsumerState<LicenseScreen> {
     if (_hardwareFingerprint.startsWith('טוען')) return;
 
     try {
-      final fileName = 'hardware_fingerprint.txt';
+      const fileName = 'hardware_fingerprint.txt';
       final result = await FilePicker.platform.saveFile(
         dialogTitle: 'שמור קובץ טביעת אצבע',
         fileName: fileName,
