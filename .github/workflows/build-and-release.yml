@@ -35,6 +35,10 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pub-
 
+      - name: Run flutter clean
+        run: flutter clean
+        working-directory: src
+
       - name: Install dependencies
         run: flutter pub get
         working-directory: src
