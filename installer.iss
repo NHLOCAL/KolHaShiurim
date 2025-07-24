@@ -10,6 +10,7 @@ AppPublisher=זה קל
 AppPublisherURL=https://nhlocal.github.io
 AppSupportURL=https://nhlocal.github.io
 AppUpdatesURL=https://nhlocal.github.io
+SetupIconFile="src\assets\icons\app_icon.ico"
 
 ; מציג את Readme.txt לפני מסך הרישיון/Welcome
 InfoBeforeFile=README.md
