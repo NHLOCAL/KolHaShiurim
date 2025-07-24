@@ -184,7 +184,8 @@ class _LicenseScreenState extends ConsumerState<LicenseScreen> {
                     'view': 'cm',
                     'fs': '1',
                     'to': 'nh.local11@gmail.com',
-                    'su': 'פנייה בנוגע לתוכנת קול השיעורים',
+                    'su':
+                        'מעוניין לרכוש רישיון לתוכנת קול השיעורים ולקבל מידע נוסף',
                   },
                 );
                 _launchUri(context, emailUri);
