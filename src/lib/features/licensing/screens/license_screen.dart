@@ -270,7 +270,7 @@ class _LicenseScreenState extends ConsumerState<LicenseScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('הפעלת רישיון תוכנה')),
+      appBar: AppBar(title: const Text('הפעלת רישיון התוכנה')),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 600),
