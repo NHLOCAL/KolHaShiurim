@@ -118,5 +118,5 @@ app.*.symbols
 !/packages/flutter_tools/test/data/dart_dependencies_test/**/.packages
 !/dev/ci/**/Gemfile.lock
 repomix-output.md
-torah_shiurim_transfer/assets/keys/private.pem
+kol_hashiurim/assets/keys/private.pem
 *.lic
