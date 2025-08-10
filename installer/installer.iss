@@ -4,16 +4,16 @@
 
 [Setup]
 AppName=קול השיעורים
-AppVerName=קול השיעורים 0.1.0
-AppVersion=0.1.0
+AppVerName=קול השיעורים 0.1.1
+AppVersion=0.1.1
 AppPublisher=זה קל
 AppPublisherURL=https://nhlocal.github.io
 AppSupportURL=https://nhlocal.github.io
 AppUpdatesURL=https://nhlocal.github.io
-SetupIconFile="src\assets\icons\app_icon.ico"
+SetupIconFile="..\src\assets\icons\app_icon.ico"
 
 ; מציג את Readme.txt לפני מסך הרישיון/Welcome
-InfoBeforeFile=README.md
+InfoBeforeFile=Readme.txt
 
 ; אם יש License:
 ; LicenseFile=License.rtf
@@ -38,9 +38,9 @@ Name: "desktopicon";   Description: "צור קיצור דרך על שולחן ה
 
 [Files]
 ; הקובץ שמוצג כ־InfoBefore
-Source: "README.md"; DestDir: "{tmp}"; Flags: dontcopy
+Source: "Readme.txt"; DestDir: "{tmp}"; Flags: dontcopy
 ; קבצי התוכנה
-Source: "src\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\src\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\קול השיעורים"; Filename: "{app}\kol_hashiurim.exe"; Tasks: startmenuicon

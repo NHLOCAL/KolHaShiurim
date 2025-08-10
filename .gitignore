@@ -120,5 +120,5 @@ app.*.symbols
 repomix-output.md
 private.pem
 *.lic
-/Output
+**/Output
 ffmpeg.exe
