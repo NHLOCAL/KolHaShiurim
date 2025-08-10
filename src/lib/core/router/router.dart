@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -8,17 +7,11 @@ import 'package:kol_hashiurim/features/licensing/screens/license_screen.dart';
 import 'package:kol_hashiurim/features/user_panel/screens/user_transfer_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
-  // Watch all dependencies at the top level
-  final authState = ref.watch(authStateProvider);
-  final licenseStatus = ref.watch(licenseStatusProvider);
-
-  // The refresh listenable needs to react to both auth and license changes.
-  // We can achieve this by creating a custom stream or simply by letting
-  // the provider re-creation handle it, which it does.
-  final refreshListenable = GoRouterRefreshStream(
-    ref.watch(authStateProvider.notifier).stream,
-  );
+  final refreshListenable = ValueNotifier<int>(0);
   ref.onDispose(refreshListenable.dispose);
+
+  ref.listen(authStateProvider, (_, __) => refreshListenable.value++);
+  ref.listen(licenseStatusProvider, (_, __) => refreshListenable.value++);
 
   return GoRouter(
     initialLocation: '/admin',
@@ -49,11 +42,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
     ],
     redirect: (context, state) {
-      // The redirect function is now synchronous and safe.
+      final authState = ref.read(authStateProvider);
+      final licenseStatus = ref.read(licenseStatusProvider);
+
       final isOnLicenseScreen = state.uri.path == '/license';
 
-      // While license status is being determined, don't redirect.
-      // This prevents flickering between screens on startup.
       if (licenseStatus.isLoading) {
         return null;
       }
@@ -64,12 +57,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         return isOnLicenseScreen ? null : '/license';
       }
 
-      // If license is valid and we are on the license screen, redirect away.
       if (isLicensed && isOnLicenseScreen) {
         return '/admin';
       }
 
-      // Standard authentication-based redirects
       final currentLocation = state.uri.path;
 
       if (authState.isLoggedOut && currentLocation != '/admin') {
@@ -88,17 +79,3 @@ final routerProvider = Provider<GoRouter>((ref) {
     },
   );
 });
-
-class GoRouterRefreshStream extends ChangeNotifier {
-  late final StreamSubscription<dynamic> _subscription;
-
-  GoRouterRefreshStream(Stream<dynamic> stream) {
-    _subscription = stream.asBroadcastStream().listen((_) => notifyListeners());
-  }
-
-  @override
-  void dispose() {
-    _subscription.cancel();
-    super.dispose();
-  }
-}
