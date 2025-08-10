@@ -1,10 +1,7 @@
-// main.dart
-
 import 'dart:ffi' as ffi;
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:kol_hashiurim/core/providers/providers.dart';
 import 'package:kol_hashiurim/core/router/router.dart';
 import 'package:kol_hashiurim/features/overlay/recent_transfers_overlay.dart';
@@ -134,23 +131,29 @@ class MyApp extends ConsumerWidget {
         GlobalCupertinoLocalizations.delegate,
       ],
       builder: (context, child) {
-        final authState = ref.watch(authStateProvider);
-        final showOverlay = authState.isLoggedOut || authState.isUser;
+        return ListenableBuilder(
+          listenable: router.routeInformationProvider,
+          builder: (context, _) {
+            final authState = ref.watch(authStateProvider);
+            final showOverlay = authState.isLoggedOut || authState.isUser;
 
-        final currentRoute = GoRouter.of(
-          context,
-        ).routeInformationProvider.value.uri.toString();
-        final isPureOverlayMode = currentRoute == '/overlay';
+            final currentRoute =
+                router.routerDelegate.currentConfiguration.last.matchedLocation;
+            final isPureOverlayMode = currentRoute == '/overlay';
 
-        return Scaffold(
-          backgroundColor: Colors.transparent,
-          body: Stack(
-            children: [
-              if (child != null) child,
-              if (showOverlay)
-                RecentTransfersOverlay(isPureOverlayMode: isPureOverlayMode),
-            ],
-          ),
+            return Scaffold(
+              backgroundColor: Colors.transparent,
+              body: Stack(
+                children: [
+                  if (child != null) child,
+                  if (showOverlay)
+                    RecentTransfersOverlay(
+                      isPureOverlayMode: isPureOverlayMode,
+                    ),
+                ],
+              ),
+            );
+          },
         );
       },
       routerConfig: router,
