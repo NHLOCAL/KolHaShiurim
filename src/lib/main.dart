@@ -1,9 +1,13 @@
+// main.dart
+
 import 'dart:ffi' as ffi;
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:kol_hashiurim/core/providers/providers.dart';
 import 'package:kol_hashiurim/core/router/router.dart';
+import 'package:kol_hashiurim/features/overlay/recent_transfers_overlay.dart';
 import 'package:kol_hashiurim/tray/tray_initializer.dart';
 import 'package:kol_hashiurim/tray/window_actions.dart';
 import 'package:win32/win32.dart';
@@ -33,20 +37,16 @@ void main() async {
 class MyApp extends ConsumerWidget {
   const MyApp({super.key});
 
-  // --- סכמת הצבעים המעודכנת והמקצועית ---
   static const Color accentGold = Color(0xFFB89B72);
   static const Color parchmentBackground = Color(0xFFF9F6F2);
   static const Color inkBrownText = Color(0xFF3C3631);
-  static const Color darkBackground = Color(
-    0xFF2E2823,
-  ); // רקע כהה עוד יותר לרצינות
+  static const Color darkBackground = Color(0xFF2E2823);
   static const Color darkSurface = Color(0xFF4A433D);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
 
-    // --- ערכת נושא בהירה - נקייה וקריאה ---
     final lightTheme = ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
@@ -58,22 +58,21 @@ class MyApp extends ConsumerWidget {
         onSecondary: Colors.white,
         error: Colors.red,
         onError: Colors.white,
-        surface: parchmentBackground, // רקע לקלפים ודיאלוגים
-        onSurface: inkBrownText, // טקסט על קלפים ודיאלוגים
+        surface: parchmentBackground,
+        onSurface: inkBrownText,
       ),
       scaffoldBackgroundColor: parchmentBackground,
       appBarTheme: const AppBarTheme(
         centerTitle: true,
         elevation: 0.5,
         backgroundColor: parchmentBackground,
-        foregroundColor: inkBrownText, // צבע לאייקונים ולטקסט ב-AppBar
+        foregroundColor: inkBrownText,
         titleTextStyle: TextStyle(
           color: inkBrownText,
           fontSize: 20,
-          fontWeight: FontWeight.w600, // משקל מעט קל יותר למראה נקי
+          fontWeight: FontWeight.w600,
         ),
       ),
-      // התאמות נוספות לקריאות ונוחות
       textTheme: Theme.of(
         context,
       ).textTheme.apply(bodyColor: inkBrownText, displayColor: inkBrownText),
@@ -86,20 +85,19 @@ class MyApp extends ConsumerWidget {
       ),
     );
 
-    // --- ערכת נושא כהה - מכובדת וברורה ---
     final darkTheme = ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
       colorScheme: const ColorScheme(
         brightness: Brightness.dark,
         primary: accentGold,
-        onPrimary: inkBrownText, // ניגודיות טובה על זהב
+        onPrimary: inkBrownText,
         secondary: accentGold,
         onSecondary: inkBrownText,
         error: Colors.redAccent,
         onError: Colors.white,
-        surface: darkSurface, // משטח מעט בהיר יותר ליצירת עומק
-        onSurface: parchmentBackground, // טקסט על המשטח
+        surface: darkSurface,
+        onSurface: parchmentBackground,
       ),
       scaffoldBackgroundColor: darkBackground,
       appBarTheme: const AppBarTheme(
@@ -127,7 +125,7 @@ class MyApp extends ConsumerWidget {
       debugShowCheckedModeBanner: false,
       theme: lightTheme,
       darkTheme: darkTheme,
-      themeMode: ThemeMode.system, // מומלץ להתאמה אוטומטית למערכת
+      themeMode: ThemeMode.system,
       locale: const Locale('he', 'IL'),
       supportedLocales: const [Locale('he', 'IL'), Locale('en', 'US')],
       localizationsDelegates: const [
@@ -135,6 +133,26 @@ class MyApp extends ConsumerWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
+      builder: (context, child) {
+        final authState = ref.watch(authStateProvider);
+        final showOverlay = authState.isLoggedOut || authState.isUser;
+
+        final currentRoute = GoRouter.of(
+          context,
+        ).routeInformationProvider.value.uri.toString();
+        final isPureOverlayMode = currentRoute == '/overlay';
+
+        return Scaffold(
+          backgroundColor: Colors.transparent,
+          body: Stack(
+            children: [
+              if (child != null) child,
+              if (showOverlay)
+                RecentTransfersOverlay(isPureOverlayMode: isPureOverlayMode),
+            ],
+          ),
+        );
+      },
       routerConfig: router,
     );
   }

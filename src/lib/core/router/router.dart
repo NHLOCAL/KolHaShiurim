@@ -1,3 +1,5 @@
+// core/router/router.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -14,7 +16,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   ref.listen(licenseStatusProvider, (_, __) => refreshListenable.value++);
 
   return GoRouter(
-    initialLocation: '/admin',
+    initialLocation: '/overlay',
     refreshListenable: refreshListenable,
     routes: [
       GoRoute(
@@ -40,12 +42,18 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/admin',
         builder: (context, state) => const AdminPanelScreen(),
       ),
+      GoRoute(
+        path: '/overlay',
+        builder: (context, state) =>
+            const Scaffold(backgroundColor: Colors.transparent),
+      ),
     ],
     redirect: (context, state) {
       final authState = ref.read(authStateProvider);
       final licenseStatus = ref.read(licenseStatusProvider);
 
-      final isOnLicenseScreen = state.uri.path == '/license';
+      final currentLocation = state.uri.path;
+      final isOnLicenseScreen = currentLocation == '/license';
 
       if (licenseStatus.isLoading) {
         return null;
@@ -58,13 +66,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       }
 
       if (isLicensed && isOnLicenseScreen) {
-        return '/admin';
+        return '/overlay';
       }
 
-      final currentLocation = state.uri.path;
-
-      if (authState.isLoggedOut && currentLocation != '/admin') {
-        return '/admin';
+      if (authState.isLoggedOut && currentLocation != '/overlay') {
+        return '/overlay';
       }
 
       if (authState.isAdmin && currentLocation != '/admin') {

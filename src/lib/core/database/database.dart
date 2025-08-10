@@ -1,3 +1,5 @@
+// core/database/database.dart
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -159,6 +161,14 @@ class AppDatabase extends _$AppDatabase {
 
   Future<int> logTransfer(TransfersCompanion transfer) =>
       into(transfers).insert(transfer);
+
+  Stream<List<Transfer>> watchRecentTransfers() {
+    final sevenDaysAgo = DateTime.now().subtract(const Duration(days: 7));
+    return (select(transfers)
+          ..where((t) => t.timestamp.isBiggerOrEqualValue(sevenDaysAgo))
+          ..orderBy([(t) => OrderingTerm.desc(t.timestamp)]))
+        .watch();
+  }
 
   Future<AppSetting> getAppSettings() async {
     var setting = await (select(

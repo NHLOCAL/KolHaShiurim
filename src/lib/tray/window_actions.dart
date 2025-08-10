@@ -23,11 +23,26 @@ class WindowActions {
     );
 
     windowManager.waitUntilReadyToShow(windowOptions, () async {
-      await windowManager.hide();
+      await configureWindowForOverlay();
+      await windowManager.show();
+      await windowManager.focus();
     });
 
     await windowManager.setPreventClose(true);
     windowManager.addListener(_WindowListener());
+  }
+
+  static Future<void> configureWindowForOverlay() async {
+    await windowManager.setAsFrameless();
+    await windowManager.setAlwaysOnTop(true);
+    await windowManager.setFullScreen(true);
+    await windowManager.setBackgroundColor(Colors.transparent);
+    await windowManager.setIgnoreMouseEvents(true);
+  }
+
+  static Future<void> showOverlayMode() async {
+    await configureWindowForOverlay();
+    router.go('/overlay');
   }
 
   static void _forceShowOnTop() {
@@ -53,6 +68,7 @@ class WindowActions {
   }
 
   static Future<void> _switchToAdminMode() async {
+    await windowManager.setIgnoreMouseEvents(false);
     if (await windowManager.isFullScreen()) {
       await windowManager.setFullScreen(false);
     }
@@ -62,7 +78,7 @@ class WindowActions {
     if (!Platform.isWindows) {
       try {
         await windowManager.setMovable(true);
-      } on MissingPluginException {}
+      } on MissingPluginException catch (_) {}
     }
 
     await windowManager.setTitleBarStyle(TitleBarStyle.normal);
@@ -71,6 +87,8 @@ class WindowActions {
   }
 
   static Future<void> _switchToKioskMode() async {
+    await windowManager.setIgnoreMouseEvents(false);
+    await windowManager.setAsFrameless();
     await windowManager.setAlwaysOnTop(true);
     await windowManager.setFullScreen(true);
     await windowManager.setResizable(false);
@@ -78,7 +96,7 @@ class WindowActions {
     if (!Platform.isWindows) {
       try {
         await windowManager.setMovable(false);
-      } on MissingPluginException {}
+      } on MissingPluginException catch (_) {}
     }
 
     await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
@@ -100,12 +118,7 @@ class WindowActions {
   }
 
   static Future<void> hide({bool resizeToAdmin = true}) async {
-    if (resizeToAdmin) {
-      await _switchToAdminMode();
-    } else {
-      await windowManager.setAlwaysOnTop(false);
-    }
-    await windowManager.hide();
+    await showOverlayMode();
   }
 
   static Future<void> exitApp() async {
