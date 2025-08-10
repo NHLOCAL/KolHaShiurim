@@ -583,6 +583,11 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
                         ),
                         Expanded(
                           child: Slider(
+                            activeColor: Theme.of(context).colorScheme.primary,
+                            inactiveColor: Theme.of(context)
+                                .colorScheme
+                                .onSurface
+                                .withOpacity(0.3),
                             value: position.inMilliseconds.toDouble(),
                             max: duration.inMilliseconds.toDouble(),
                             onChanged: (value) {
@@ -613,6 +618,12 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
                                 SizedBox(
                                   width: 100,
                                   child: Slider(
+                                    activeColor:
+                                        Theme.of(context).colorScheme.secondary,
+                                    inactiveColor: Theme.of(context)
+                                        .colorScheme
+                                        .onSurface
+                                        .withOpacity(0.3),
                                     value: snapshot.data ?? 1.0,
                                     onChanged: _audioPlayer.setVolume,
                                   ),
