@@ -8,6 +8,7 @@ import 'package:kol_hashiurim/core/database/database.dart';
 import 'package:kol_hashiurim/core/providers/providers.dart';
 import 'package:kol_hashiurim/models/device_info.dart';
 import 'package:kol_hashiurim/services/log_service.dart';
+import 'package:path/path.dart' as p;
 
 class DeviceManagementTab extends ConsumerWidget {
   const DeviceManagementTab({super.key});
@@ -285,11 +286,9 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
         return;
       }
 
-      String relativePath = selectedPath
-          .substring(drive.mountPath.length)
-          .trim();
-      if (relativePath.startsWith(r'\') || relativePath.startsWith('/')) {
-        relativePath = relativePath.substring(1);
+      String relativePath = p.relative(selectedPath, from: drive.mountPath);
+      if (relativePath == '.') {
+        relativePath = '';
       }
 
       if (mounted) {
