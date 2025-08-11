@@ -12,12 +12,10 @@ import 'package:path/path.dart' as p;
 
 class DeviceManagementTab extends ConsumerWidget {
   const DeviceManagementTab({super.key});
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final devicesAsync = ref.watch(allDevicesProvider);
     final logService = ref.read(logServiceProvider);
-
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
         icon: const Icon(Icons.add),
@@ -71,7 +69,12 @@ class DeviceManagementTab extends ConsumerWidget {
                         );
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('שגיאה במחיקת התקן: $e')),
+                            const SnackBar(
+                              content: Text(
+                                'שגיאה במחיקת התקן. פרטים נוספים ביומן.',
+                              ),
+                              backgroundColor: Colors.red,
+                            ),
                           );
                         }
                       }
@@ -147,7 +150,6 @@ class DeviceManagementTab extends ConsumerWidget {
 class _DeviceDialog extends ConsumerStatefulWidget {
   final Device? device;
   const _DeviceDialog({this.device});
-
   @override
   ConsumerState<_DeviceDialog> createState() => __DeviceDialogState();
 }
@@ -157,13 +159,11 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
   late TextEditingController _sourcePathController;
   int? _selectedUserId;
   final _formKey = GlobalKey<FormState>();
-
   String? _mountPath;
   bool _isLoading = false;
   bool _isChangingSerial = false;
   bool _isEditingSerial = false;
   late final LogService _logService;
-
   @override
   void initState() {
     super.initState();
@@ -177,7 +177,6 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
     _selectedUserId = widget.device?.userId;
     _isEditingSerial = widget.device == null;
     _mountPath = widget.device?.mountPath;
-
     if (widget.device != null) {
       _findCurrentMountPath();
     }
@@ -245,71 +244,64 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
       );
       if (selectedPath == null) {
         _logService.logInfo('Device location cancelled by user.');
-        if (mounted) setState(() => _isLoading = false);
         return;
       }
       _logService.logInfo('User selected path: $selectedPath');
-
-      final devices = await ref.read(connectedDevicesProvider.future);
+      final connectedDevices = await ref.read(connectedDevicesProvider.future);
       if (!mounted) return;
-
-      if (devices.isEmpty) {
-        _logService.logWarning(
-          'No external drives found during device location.',
-        );
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("לא נמצאו כוננים חיצוניים.")),
-        );
-        setState(() => _isLoading = false);
-        return;
-      }
-
-      ConnectedDeviceInfo? drive;
+      ConnectedDeviceInfo? foundDrive;
       try {
-        drive = devices.firstWhere((d) => selectedPath.startsWith(d.mountPath));
-      } catch (e) {
-        drive = null;
+        foundDrive = connectedDevices.firstWhere(
+          (d) => selectedPath.startsWith(d.mountPath),
+        );
+      } on StateError {
+        foundDrive = null;
       }
-
-      if (drive == null) {
+      if (foundDrive == null) {
+        _logService.logWarning(
+          'Selected path ($selectedPath) is not on a recognized external drive.',
+        );
         if (mounted) {
-          _logService.logWarning(
-            'Selected path ($selectedPath) is not on a recognized external drive.',
-          );
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text("התיקיה שנבחרה אינה נמצאת על כונן חיצוני מזוהה."),
             ),
           );
         }
-        setState(() => _isLoading = false);
         return;
       }
-
-      String relativePath = p.relative(selectedPath, from: drive.mountPath);
+      final validDrive = foundDrive;
+      String relativePath = p.relative(
+        selectedPath,
+        from: validDrive.mountPath,
+      );
       if (relativePath == '.') {
         relativePath = '';
       }
-
-      if (mounted) {
-        setState(() {
-          _mountPath = drive!.mountPath;
-          _serialController.text = drive.serialNumber;
-          _sourcePathController.text = relativePath;
-          _isLoading = false;
-          _isEditingSerial = false;
-        });
-        _logService.logInfo(
-          'Device located successfully. MountPath: $_mountPath, Serial: ${_serialController.text}, SourcePath: ${_sourcePathController.text}',
-        );
-      }
+      setState(() {
+        _mountPath = validDrive.mountPath;
+        _serialController.text = validDrive.serialNumber;
+        _sourcePathController.text = relativePath;
+        _isEditingSerial = false;
+      });
+      _logService.logInfo(
+        'Device located successfully. MountPath: ${validDrive.mountPath}, Serial: ${validDrive.serialNumber}, SourcePath: $relativePath',
+      );
     } catch (e, st) {
       _logService.logError('Error during device location process.', e, st);
       if (mounted) {
-        setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('שגיאה: $e'), backgroundColor: Colors.red),
+          const SnackBar(
+            content: Text(
+              'אירעה שגיאה באיתור ההתקן. פרטים נוספים ביומן התוכנה.',
+            ),
+            backgroundColor: Colors.red,
+          ),
         );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
       }
     }
   }
@@ -321,7 +313,6 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
       );
       return;
     }
-
     setState(() => _isChangingSerial = true);
     _logService.logUserActivity(
       'Admin attempting to change serial for device at $_mountPath to ${_serialController.text}.',
@@ -349,7 +340,12 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('שגיאה: $e'), backgroundColor: Colors.red),
+          const SnackBar(
+            content: Text(
+              'שגיאה בשינוי המספר הסידורי. ייתכן שהתוכנה צריכה הרשאות מנהל. פרטים נוספים ביומן.',
+            ),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {
@@ -373,7 +369,6 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
         );
         return;
       }
-
       final serialNumber = _serialController.text;
       final companion = DevicesCompanion(
         serialNumber: drift.Value(serialNumber),
@@ -381,7 +376,6 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
         sourcePath: drift.Value(_sourcePathController.text),
         userId: drift.Value(_selectedUserId!),
       );
-
       try {
         if (widget.device == null) {
           final newDeviceId = await ref
@@ -406,11 +400,14 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
       } catch (e, st) {
         _logService.logError('Failed to save device: $serialNumber', e, st);
         if (mounted) {
+          String errorMessage = 'שגיאה בשמירת ההתקן. פרטים נוספים ביומן.';
+          if (e.toString().contains(
+            'UNIQUE constraint failed: devices.serial_number',
+          )) {
+            errorMessage = 'המספר הסידורי שהוזן כבר קיים במערכת.';
+          }
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('שגיאה בשמירה: $e'),
-              backgroundColor: Colors.red,
-            ),
+            SnackBar(content: Text(errorMessage), backgroundColor: Colors.red),
           );
         }
       }
@@ -424,7 +421,6 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
   @override
   Widget build(BuildContext context) {
     final usersAsync = ref.watch(allUsersProvider);
-
     return AlertDialog(
       title: Text(widget.device == null ? 'הוספת התקן חדש' : 'עריכת התקן'),
       content: Form(

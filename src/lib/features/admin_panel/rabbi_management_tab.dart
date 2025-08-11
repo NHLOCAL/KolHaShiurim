@@ -7,12 +7,10 @@ import 'package:kol_hashiurim/core/providers/providers.dart';
 
 class RabbiManagementTab extends ConsumerWidget {
   const RabbiManagementTab({super.key});
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final rabbisAsync = ref.watch(allRabbisProvider);
     final logService = ref.read(logServiceProvider);
-
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
         icon: const Icon(Icons.add),
@@ -58,8 +56,18 @@ class RabbiManagementTab extends ConsumerWidget {
                           st,
                         );
                         if (context.mounted) {
+                          String errorMessage = 'שגיאה במחיקת הרב.';
+                          if (e.toString().contains(
+                            'FOREIGN KEY constraint failed',
+                          )) {
+                            errorMessage =
+                                'לא ניתן למחוק רב שיש לו הרשאות משוייכות למשתמשים. יש להסיר את ההרשאות תחילה.';
+                          }
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('שגיאה במחיקת רב: $e')),
+                            SnackBar(
+                              content: Text(errorMessage),
+                              backgroundColor: Colors.red,
+                            ),
                           );
                         }
                       }
@@ -90,7 +98,6 @@ class RabbiManagementTab extends ConsumerWidget {
     final pathController = TextEditingController(text: rabbi?.targetPath);
     final formKey = GlobalKey<FormState>();
     final logService = ref.read(logServiceProvider);
-
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -185,8 +192,18 @@ class RabbiManagementTab extends ConsumerWidget {
                     st,
                   );
                   if (context.mounted) {
+                    String errorMessage =
+                        'שגיאה בשמירת הרב. פרטים נוספים ביומן.';
+                    if (e.toString().contains(
+                      'UNIQUE constraint failed: rabbis.name',
+                    )) {
+                      errorMessage = 'שם הרב שהוזן כבר קיים במערכת.';
+                    }
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('שגיאה בשמירת רב: $e')),
+                      SnackBar(
+                        content: Text(errorMessage),
+                        backgroundColor: Colors.red,
+                      ),
                     );
                   }
                 }

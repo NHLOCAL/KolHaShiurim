@@ -1,5 +1,4 @@
 import 'dart:convert';
-
 import 'package:drift/drift.dart' as drift;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -10,12 +9,10 @@ import 'package:kol_hashiurim/services/log_service.dart';
 
 class UserManagementTab extends ConsumerWidget {
   const UserManagementTab({super.key});
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final usersAsync = ref.watch(allUsersProvider);
     final logService = ref.read(logServiceProvider);
-
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
         icon: const Icon(Icons.add),
@@ -83,9 +80,17 @@ class UserManagementTab extends ConsumerWidget {
                               st,
                             );
                             if (context.mounted) {
+                              String errorMessage = 'שגיאה במחיקת משתמש.';
+                              if (e.toString().contains(
+                                'FOREIGN KEY constraint failed',
+                              )) {
+                                errorMessage =
+                                    'לא ניתן למחוק משתמש המשוייך להתקן. יש למחוק את ההתקן תחילה.';
+                              }
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: Text('שגיאה במחיקת משתמש: $e'),
+                                  content: Text(errorMessage),
+                                  backgroundColor: Colors.red,
                                 ),
                               );
                             }
@@ -121,7 +126,6 @@ class UserManagementTab extends ConsumerWidget {
     );
     final formKey = GlobalKey<FormState>();
     final logService = ref.read(logServiceProvider);
-
     showDialog(
       context: context,
       builder: (context) {
@@ -200,7 +204,12 @@ class UserManagementTab extends ConsumerWidget {
                     );
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('שגיאה בשמירת משתמש: $e')),
+                        const SnackBar(
+                          content: Text(
+                            'שגיאה בשמירת המשתמש. פרטים נוספים ביומן.',
+                          ),
+                          backgroundColor: Colors.red,
+                        ),
                       );
                     }
                   }
@@ -260,7 +269,6 @@ class UserManagementTab extends ConsumerWidget {
 class _PermissionsDialog extends ConsumerStatefulWidget {
   final User user;
   const _PermissionsDialog({required this.user});
-
   @override
   ConsumerState<_PermissionsDialog> createState() => _PermissionsDialogState();
 }
@@ -270,7 +278,6 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
   Map<int, List<TextEditingController>> _pathControllers = {};
   bool _isLoading = true;
   late final LogService _logService;
-
   @override
   void initState() {
     super.initState();
@@ -296,11 +303,9 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
       final initialPermissions = await ref
           .read(databaseProvider)
           .getPermissionsForUser(widget.user.id);
-
       if (mounted) {
         final newSelectedIds = <int>{};
         final newControllers = <int, List<TextEditingController>>{};
-
         for (final p in initialPermissions) {
           newSelectedIds.add(p.rabbiId);
           final rawPathData = p.specificPath;
@@ -359,13 +364,11 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
       'Admin picking specific path for rabbi: ${rabbi.name}',
     );
     final initialDirectory = rabbi.targetPath;
-
     String? selectedDirectory = await FilePicker.platform.getDirectoryPath(
       initialDirectory: initialDirectory,
       lockParentWindow: true,
       dialogTitle: 'בחר תיקיית יעד ספציפית עבור ${rabbi.name}',
     );
-
     if (selectedDirectory != null) {
       if (!selectedDirectory.startsWith(initialDirectory)) {
         if (mounted) {
@@ -380,11 +383,9 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
         }
         return;
       }
-
       String relativePath = selectedDirectory.substring(
         initialDirectory.length,
       );
-
       relativePath = relativePath.replaceAll(r'\', '/');
       if (relativePath.startsWith('/')) {
         relativePath = relativePath.substring(1);
@@ -392,7 +393,6 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
       if (relativePath.endsWith('/')) {
         relativePath = relativePath.substring(0, relativePath.length - 1);
       }
-
       if (mounted) {
         _logService.logInfo(
           'Selected relative path for rabbi ${rabbi.name}: $relativePath',
@@ -419,11 +419,9 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
                   shrinkWrap: true,
                   children: rabbis.map<Widget>((rabbi) {
                     final isSelected = _selectedRabbiIds.contains(rabbi.id);
-
                     if (isSelected && _pathControllers[rabbi.id] == null) {
                       _pathControllers[rabbi.id] = [];
                     }
-
                     return Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
