@@ -39,7 +39,7 @@ Source: "..\src\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ig
 [Icons]
 Name: "{group}\קול השיעורים"; Filename: "{app}\kol_hashiurim.exe"; Tasks: startmenuicon
 Name: "{commondesktop}\קול השיעורים"; Filename: "{app}\kol_hashiurim.exe"; Tasks: desktopicon
-Name: "{commonstartup}\קול השיעורים"; Filename: "{app}\kol_hashiurim.exe"; WorkingDir: "{app}"; Parameters: "--background"
+Name: "{commonstartup}\קול השיעורים"; Filename: "{app}\kol_hashiurim.exe"; WorkingDir: "{app}"; Parameters: "--silent"
 
 [Run]
 Filename: "{app}\kol_hashiurim.exe"; Description: "הפעל את קול השיעורים עכשיו"; Flags: nowait postinstall skipifsilent

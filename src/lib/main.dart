@@ -10,11 +10,11 @@ import 'package:win32/win32.dart';
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Future.delayed(const Duration(milliseconds: 200));
   final hr = CoInitializeEx(ffi.nullptr, COINIT_MULTITHREADED);
   if (FAILED(hr)) {
     throw WindowsException(hr);
   }
-  final bool startInBackground = args.contains('--background');
   await WindowActions.init();
   final container = ProviderContainer();
   final logService = container.read(logServiceProvider);
@@ -28,8 +28,11 @@ void main(List<String> args) async {
   WindowActions.router = router;
   await container.read(databaseProvider).getAppSettings();
   logService.logInfo('App settings loaded.');
-  if (!startInBackground) {
+  final bool startSilently = args.contains('--silent');
+  if (!startSilently) {
     container.read(authStateProvider.notifier).loginAsAdmin();
+  } else {
+    logService.logInfo('Application starting silently in tray.');
   }
   runApp(UncontrolledProviderScope(container: container, child: const MyApp()));
 }
