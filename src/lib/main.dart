@@ -8,12 +8,13 @@ import 'package:kol_hashiurim/tray/tray_initializer.dart';
 import 'package:kol_hashiurim/tray/window_actions.dart';
 import 'package:win32/win32.dart';
 
-void main() async {
+void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   final hr = CoInitializeEx(ffi.nullptr, COINIT_MULTITHREADED);
   if (FAILED(hr)) {
     throw WindowsException(hr);
   }
+  final bool startInBackground = args.contains('--background');
   await WindowActions.init();
   final container = ProviderContainer();
   final logService = container.read(logServiceProvider);
@@ -27,26 +28,22 @@ void main() async {
   WindowActions.router = router;
   await container.read(databaseProvider).getAppSettings();
   logService.logInfo('App settings loaded.');
+  if (!startInBackground) {
+    container.read(authStateProvider.notifier).loginAsAdmin();
+  }
   runApp(UncontrolledProviderScope(container: container, child: const MyApp()));
 }
 
 class MyApp extends ConsumerWidget {
   const MyApp({super.key});
-
-  // --- סכמת הצבעים המעודכנת והמקצועית ---
   static const Color accentGold = Color(0xFFB89B72);
   static const Color parchmentBackground = Color(0xFFF9F6F2);
   static const Color inkBrownText = Color(0xFF3C3631);
-  static const Color darkBackground = Color(
-    0xFF2E2823,
-  ); // רקע כהה עוד יותר לרצינות
+  static const Color darkBackground = Color(0xFF2E2823);
   static const Color darkSurface = Color(0xFF4A433D);
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
-
-    // --- ערכת נושא בהירה - נקייה וקריאה ---
     final lightTheme = ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
@@ -58,22 +55,21 @@ class MyApp extends ConsumerWidget {
         onSecondary: Colors.white,
         error: Colors.red,
         onError: Colors.white,
-        surface: parchmentBackground, // רקע לקלפים ודיאלוגים
-        onSurface: inkBrownText, // טקסט על קלפים ודיאלוגים
+        surface: parchmentBackground,
+        onSurface: inkBrownText,
       ),
       scaffoldBackgroundColor: parchmentBackground,
       appBarTheme: const AppBarTheme(
         centerTitle: true,
         elevation: 0.5,
         backgroundColor: parchmentBackground,
-        foregroundColor: inkBrownText, // צבע לאייקונים ולטקסט ב-AppBar
+        foregroundColor: inkBrownText,
         titleTextStyle: TextStyle(
           color: inkBrownText,
           fontSize: 20,
-          fontWeight: FontWeight.w600, // משקל מעט קל יותר למראה נקי
+          fontWeight: FontWeight.w600,
         ),
       ),
-      // התאמות נוספות לקריאות ונוחות
       textTheme: Theme.of(
         context,
       ).textTheme.apply(bodyColor: inkBrownText, displayColor: inkBrownText),
@@ -85,21 +81,19 @@ class MyApp extends ConsumerWidget {
         ),
       ),
     );
-
-    // --- ערכת נושא כהה - מכובדת וברורה ---
     final darkTheme = ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
       colorScheme: const ColorScheme(
         brightness: Brightness.dark,
         primary: accentGold,
-        onPrimary: inkBrownText, // ניגודיות טובה על זהב
+        onPrimary: inkBrownText,
         secondary: accentGold,
         onSecondary: inkBrownText,
         error: Colors.redAccent,
         onError: Colors.white,
-        surface: darkSurface, // משטח מעט בהיר יותר ליצירת עומק
-        onSurface: parchmentBackground, // טקסט על המשטח
+        surface: darkSurface,
+        onSurface: parchmentBackground,
       ),
       scaffoldBackgroundColor: darkBackground,
       appBarTheme: const AppBarTheme(
@@ -121,13 +115,12 @@ class MyApp extends ConsumerWidget {
         ),
       ),
     );
-
     return MaterialApp.router(
       title: 'קול השיעורים',
       debugShowCheckedModeBanner: false,
       theme: lightTheme,
       darkTheme: darkTheme,
-      themeMode: ThemeMode.system, // מומלץ להתאמה אוטומטית למערכת
+      themeMode: ThemeMode.system,
       locale: const Locale('he', 'IL'),
       supportedLocales: const [Locale('he', 'IL'), Locale('en', 'US')],
       localizationsDelegates: const [

@@ -46,7 +46,7 @@ Source: "..\src\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ig
 Name: "{group}\קול השיעורים"; Filename: "{app}\kol_hashiurim.exe"; Tasks: startmenuicon
 Name: "{commondesktop}\קול השיעורים"; Filename: "{app}\kol_hashiurim.exe"; Tasks: desktopicon
 
-Name: "{userstartup}\קול השיעורים"; Filename: "{app}\kol_hashiurim.exe"; WorkingDir: "{app}"
+Name: "{userstartup}\קול השיעורים"; Filename: "{app}\kol_hashiurim.exe"; WorkingDir: "{app}"; Parameters: "--background"
 
 [Run]
 Filename: "{app}\kol_hashiurim.exe"; Description: "הפעל את קול השיעורים עכשיו"; Flags: nowait postinstall skipifsilent
@@ -54,4 +54,3 @@ Filename: "{app}\kol_hashiurim.exe"; Description: "הפעל את קול השיע
 Filename: "{app}\data\flutter_assets\assets\bin\Volumeid.exe"; \
   Flags: shellexec waituntilterminated skipifsilent; \
   StatusMsg: "מפעיל חלון אישור, אנא אשר כדי להשלים את ההתקנה..."
-
