@@ -8,6 +8,7 @@ import 'package:kol_hashiurim/services/file_service.dart';
 import 'package:kol_hashiurim/services/log_service.dart';
 import 'package:kol_hashiurim/models/device_info.dart';
 import 'package:kol_hashiurim/tray/window_actions.dart';
+import 'package:window_manager/window_manager.dart';
 
 final licenseManagerProvider = FutureProvider<LicenseManager>((ref) async {
   final pubPem = await rootBundle.loadString('assets/keys/public.pem');
@@ -69,7 +70,8 @@ class AuthStateNotifier extends StateNotifier<AppUserState> {
               }
             },
           );
-          if (state.isLoggedOut) {
+          final isWindowVisible = await windowManager.isVisible();
+          if (state.isLoggedOut && !isWindowVisible) {
             for (final dev in devices) {
               final db = _ref.read(databaseProvider);
               final dbDevice = await db.getDeviceBySerial(dev.serialNumber);
