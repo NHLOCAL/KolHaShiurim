@@ -1,7 +1,6 @@
 import 'dart:io' show Platform;
 import 'dart:ffi' as dart_ffi;
 import 'package:ffi/ffi.dart';
-import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
@@ -13,19 +12,6 @@ class WindowActions {
   static VoidCallback? onWindowCloseCallback;
 
   static Future<void> init() async {
-    WidgetsFlutterBinding.ensureInitialized();
-    await windowManager.ensureInitialized();
-
-    const WindowOptions windowOptions = WindowOptions(
-      size: Size(1280, 720),
-      center: true,
-      title: 'קול השיעורים',
-    );
-
-    windowManager.waitUntilReadyToShow(windowOptions, () async {
-      await windowManager.hide();
-    });
-
     await windowManager.setPreventClose(true);
     windowManager.addListener(_WindowListener());
   }

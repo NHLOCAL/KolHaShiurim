@@ -7,18 +7,40 @@ import 'package:kol_hashiurim/core/router/router.dart';
 import 'package:kol_hashiurim/tray/tray_initializer.dart';
 import 'package:kol_hashiurim/tray/window_actions.dart';
 import 'package:win32/win32.dart';
+import 'package:window_manager/window_manager.dart';
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Future.delayed(const Duration(milliseconds: 200));
+  await windowManager.ensureInitialized();
+
   final hr = CoInitializeEx(ffi.nullptr, COINIT_MULTITHREADED);
   if (FAILED(hr)) {
     throw WindowsException(hr);
   }
-  await WindowActions.init();
+
   final container = ProviderContainer();
   final logService = container.read(logServiceProvider);
   await logService.init();
+
+  final bool startSilently = args.contains('--silent');
+
+  WindowOptions windowOptions = const WindowOptions(
+    size: Size(1280, 720),
+    center: true,
+    title: 'קול השיעורים',
+  );
+
+  windowManager.waitUntilReadyToShow(windowOptions, () async {
+    if (startSilently) {
+      await windowManager.hide();
+      logService.logInfo('Application starting silently in tray.');
+    } else {
+      await windowManager.show();
+      await windowManager.focus();
+    }
+  });
+
+  await WindowActions.init();
   WindowActions.onWindowCloseCallback = () {
     logService.logUserActivity('Application window closed, logging out.');
     container.read(authStateProvider.notifier).logout();
@@ -28,12 +50,11 @@ void main(List<String> args) async {
   WindowActions.router = router;
   await container.read(databaseProvider).getAppSettings();
   logService.logInfo('App settings loaded.');
-  final bool startSilently = args.contains('--silent');
+
   if (!startSilently) {
     container.read(authStateProvider.notifier).loginAsAdmin();
-  } else {
-    logService.logInfo('Application starting silently in tray.');
   }
+
   runApp(UncontrolledProviderScope(container: container, child: const MyApp()));
 }
 
