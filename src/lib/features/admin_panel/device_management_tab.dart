@@ -237,11 +237,18 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
   Future<void> _locateDevice() async {
     setState(() => _isLoading = true);
     _logService.logUserActivity('Admin initiated device location process.');
+    final pollingManager = ref.read(pollingManagerProvider);
+    String? selectedPath;
     try {
-      final selectedPath = await FilePicker.platform.getDirectoryPath(
+      pollingManager.pausePollingForOperation();
+      selectedPath = await FilePicker.platform.getDirectoryPath(
         lockParentWindow: true,
         dialogTitle: 'בחר תיקיית מקור מההתקן החיצוני',
       );
+    } finally {
+      pollingManager.resumePollingAfterOperation();
+    }
+    try {
       if (selectedPath == null) {
         _logService.logInfo('Device location cancelled by user.');
         return;
@@ -252,7 +259,7 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
       ConnectedDeviceInfo? foundDrive;
       try {
         foundDrive = connectedDevices.firstWhere(
-          (d) => selectedPath.startsWith(d.mountPath),
+          (d) => selectedPath!.startsWith(d.mountPath),
         );
       } on StateError {
         foundDrive = null;

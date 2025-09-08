@@ -7,6 +7,7 @@ import 'package:kol_hashiurim/services/device_service.dart';
 import 'package:kol_hashiurim/services/file_service.dart';
 import 'package:kol_hashiurim/services/log_service.dart';
 import 'package:kol_hashiurim/models/device_info.dart';
+import 'package:kol_hashiurim/services/polling_manager.dart';
 import 'package:kol_hashiurim/tray/window_actions.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -24,11 +25,18 @@ final databaseProvider = Provider<AppDatabase>((_) => AppDatabase());
 final logServiceProvider = Provider<LogService>((_) => LogService());
 final deviceServiceProvider = Provider<DeviceService>((ref) {
   final logService = ref.watch(logServiceProvider);
-  return DeviceService(logService);
+  final deviceService = DeviceService(logService);
+  ref.onDispose(() => deviceService.dispose());
+  return deviceService;
 });
 final fileServiceProvider = Provider<FileService>((ref) {
   final logService = ref.watch(logServiceProvider);
   return FileService(logService);
+});
+final pollingManagerProvider = Provider<PollingManager>((ref) {
+  final deviceService = ref.watch(deviceServiceProvider);
+  final logService = ref.watch(logServiceProvider);
+  return PollingManager(deviceService, logService);
 });
 final connectedDevicesProvider = StreamProvider<List<ConnectedDeviceInfo>>((
   ref,

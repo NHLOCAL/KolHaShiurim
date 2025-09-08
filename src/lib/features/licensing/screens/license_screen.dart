@@ -10,7 +10,6 @@ import 'package:url_launcher/url_launcher.dart';
 class LicenseScreen extends ConsumerStatefulWidget {
   final LicenseManager licenseManager;
   const LicenseScreen({required this.licenseManager, super.key});
-
   @override
   ConsumerState<LicenseScreen> createState() => _LicenseScreenState();
 }
@@ -20,7 +19,6 @@ class _LicenseScreenState extends ConsumerState<LicenseScreen> {
   String? _statusMessage;
   bool _isLoading = false;
   String _hardwareFingerprint = 'טוען טביעת אצבע...';
-
   @override
   void initState() {
     super.initState();
@@ -48,10 +46,17 @@ class _LicenseScreenState extends ConsumerState<LicenseScreen> {
   }
 
   Future<void> _loadFile() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['json', 'lic'],
-    );
+    final pollingManager = ref.read(pollingManagerProvider);
+    FilePickerResult? result;
+    try {
+      pollingManager.pausePollingForOperation();
+      result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['json', 'lic'],
+      );
+    } finally {
+      pollingManager.resumePollingAfterOperation();
+    }
     if (result != null) {
       try {
         final content = await File(result.files.single.path!).readAsString();
@@ -69,16 +74,21 @@ class _LicenseScreenState extends ConsumerState<LicenseScreen> {
 
   Future<void> _saveFingerprintToFile() async {
     if (_hardwareFingerprint.startsWith('טוען')) return;
-
     try {
       const fileName = 'hardware_fingerprint.txt';
-      final result = await FilePicker.platform.saveFile(
-        dialogTitle: 'שמור קובץ טביעת אצבע',
-        fileName: fileName,
-        type: FileType.custom,
-        allowedExtensions: ['txt'],
-      );
-
+      final pollingManager = ref.read(pollingManagerProvider);
+      String? result;
+      try {
+        pollingManager.pausePollingForOperation();
+        result = await FilePicker.platform.saveFile(
+          dialogTitle: 'שמור קובץ טביעת אצבע',
+          fileName: fileName,
+          type: FileType.custom,
+          allowedExtensions: ['txt'],
+        );
+      } finally {
+        pollingManager.resumePollingAfterOperation();
+      }
       if (result != null) {
         final file = File(result);
         await file.writeAsString(_hardwareFingerprint);
@@ -112,14 +122,11 @@ class _LicenseScreenState extends ConsumerState<LicenseScreen> {
       _isLoading = true;
       _statusMessage = 'מאמת רישיון...';
     });
-
     final logService = ref.read(logServiceProvider);
-
     final valid = await widget.licenseManager.verifyAndSaveLicense(
       _controller.text,
       logService,
     );
-
     if (mounted) {
       if (valid) {
         ref.invalidate(licenseStatusProvider);
@@ -147,7 +154,6 @@ class _LicenseScreenState extends ConsumerState<LicenseScreen> {
       color: Theme.of(context).colorScheme.primary,
       decoration: TextDecoration.underline,
     );
-
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16.0),

@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-
 import 'package:drift/drift.dart' as drift;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -10,20 +9,17 @@ import 'package:kol_hashiurim/core/providers/providers.dart';
 
 class SettingsTab extends ConsumerWidget {
   const SettingsTab({super.key});
-
   Future<void> _backupSettings(BuildContext context, WidgetRef ref) async {
     final logService = ref.read(logServiceProvider);
     logService.logUserActivity('Admin initiated settings backup.');
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     try {
       final db = ref.read(databaseProvider);
-
       final users = await db.select(db.users).get();
       final devices = await db.select(db.devices).get();
       final rabbis = await db.select(db.rabbis).get();
       final permissions = await db.select(db.userRabbiPermissions).get();
       final settings = await db.getAppSettings();
-
       final backupData = {
         'version': 1,
         'timestamp': DateTime.now().toIso8601String(),
@@ -33,18 +29,22 @@ class SettingsTab extends ConsumerWidget {
         'userRabbiPermissions': permissions.map((p) => p.toJson()).toList(),
         'appSettings': settings.toJson(),
       };
-
       final jsonString = const JsonEncoder.withIndent('  ').convert(backupData);
-
       final fileName =
           'torah_shiurim_backup_${DateTime.now().toIso8601String().split('T').first}.json';
-      final result = await FilePicker.platform.saveFile(
-        dialogTitle: 'שמור קובץ גיבוי',
-        fileName: fileName,
-        type: FileType.custom,
-        allowedExtensions: ['json'],
-      );
-
+      final pollingManager = ref.read(pollingManagerProvider);
+      String? result;
+      try {
+        pollingManager.pausePollingForOperation();
+        result = await FilePicker.platform.saveFile(
+          dialogTitle: 'שמור קובץ גיבוי',
+          fileName: fileName,
+          type: FileType.custom,
+          allowedExtensions: ['json'],
+        );
+      } finally {
+        pollingManager.resumePollingAfterOperation();
+      }
       if (result != null) {
         final file = File(result);
         await file.writeAsString(jsonString);
@@ -77,7 +77,6 @@ class SettingsTab extends ConsumerWidget {
     final logService = ref.read(logServiceProvider);
     logService.logUserActivity('Admin initiated settings restore.');
     final scaffoldMessenger = ScaffoldMessenger.of(context);
-
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -100,20 +99,24 @@ class SettingsTab extends ConsumerWidget {
         ],
       ),
     );
-
     if (confirmed != true) {
       logService.logInfo(
         'Settings restore was cancelled by user at confirmation dialog.',
       );
       return;
     }
-
     try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['json'],
-      );
-
+      final pollingManager = ref.read(pollingManagerProvider);
+      FilePickerResult? result;
+      try {
+        pollingManager.pausePollingForOperation();
+        result = await FilePicker.platform.pickFiles(
+          type: FileType.custom,
+          allowedExtensions: ['json'],
+        );
+      } finally {
+        pollingManager.resumePollingAfterOperation();
+      }
       if (result == null || result.files.single.path == null) {
         logService.logInfo('Settings restore file picker was cancelled.');
         return;
@@ -121,11 +124,9 @@ class SettingsTab extends ConsumerWidget {
       final file = File(result.files.single.path!);
       final jsonString = await file.readAsString();
       final backupData = jsonDecode(jsonString);
-
       final db = ref.read(databaseProvider);
       await db.transaction(() async {
         logService.logInfo("Starting database restore transaction.");
-
         await db.delete(db.userRabbiPermissions).go();
         await db.delete(db.devices).go();
         await db.delete(db.rabbis).go();
@@ -133,7 +134,6 @@ class SettingsTab extends ConsumerWidget {
         logService.logInfo(
           "Cleared all users, devices, rabbis, and permissions.",
         );
-
         final settingsMap = backupData['appSettings'] as Map<String, dynamic>;
         await db.updateAppSettings(
           AppSettingsCompanion(
@@ -142,7 +142,6 @@ class SettingsTab extends ConsumerWidget {
           ),
         );
         logService.logInfo("Restored app settings.");
-
         final oldNewRabbiIdMap = <int, int>{};
         final rabbisList = backupData['rabbis'] as List;
         for (final rabbiMap in rabbisList) {
@@ -158,7 +157,6 @@ class SettingsTab extends ConsumerWidget {
           oldNewRabbiIdMap[oldId] = newId;
         }
         logService.logInfo("Restored ${rabbisList.length} rabbis.");
-
         final oldNewUserIdMap = <int, int>{};
         final usersList = backupData['users'] as List;
         for (final userMap in usersList) {
@@ -174,7 +172,6 @@ class SettingsTab extends ConsumerWidget {
           oldNewUserIdMap[oldId] = newId;
         }
         logService.logInfo("Restored ${oldNewUserIdMap.length} users.");
-
         final devicesList = backupData['devices'] as List;
         for (final deviceMap in devicesList) {
           final oldUserId = deviceMap['userId'] as int;
@@ -193,7 +190,6 @@ class SettingsTab extends ConsumerWidget {
           }
         }
         logService.logInfo("Restored devices.");
-
         final permissionsList = backupData['userRabbiPermissions'] as List;
         for (final permMap in permissionsList) {
           final oldUserId = permMap['userId'] as int;
@@ -214,7 +210,6 @@ class SettingsTab extends ConsumerWidget {
         }
         logService.logInfo("Restored permissions.");
       });
-
       logService.logUserActivity(
         'Settings successfully restored from ${file.path}.',
       );
@@ -243,7 +238,6 @@ class SettingsTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settingsAsync = ref.watch(appSettingsProvider);
     final logService = ref.read(logServiceProvider);
-
     return Scaffold(
       body: settingsAsync.when(
         data: (settings) {

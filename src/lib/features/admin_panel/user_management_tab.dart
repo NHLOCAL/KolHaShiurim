@@ -364,11 +364,18 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
       'Admin picking specific path for rabbi: ${rabbi.name}',
     );
     final initialDirectory = rabbi.targetPath;
-    String? selectedDirectory = await FilePicker.platform.getDirectoryPath(
-      initialDirectory: initialDirectory,
-      lockParentWindow: true,
-      dialogTitle: 'בחר תיקיית יעד ספציפית עבור ${rabbi.name}',
-    );
+    final pollingManager = ref.read(pollingManagerProvider);
+    String? selectedDirectory;
+    try {
+      pollingManager.pausePollingForOperation();
+      selectedDirectory = await FilePicker.platform.getDirectoryPath(
+        initialDirectory: initialDirectory,
+        lockParentWindow: true,
+        dialogTitle: 'בחר תיקיית יעד ספציפית עבור ${rabbi.name}',
+      );
+    } finally {
+      pollingManager.resumePollingAfterOperation();
+    }
     if (selectedDirectory != null) {
       if (!selectedDirectory.startsWith(initialDirectory)) {
         if (mounted) {

@@ -98,6 +98,7 @@ class RabbiManagementTab extends ConsumerWidget {
     final pathController = TextEditingController(text: rabbi?.targetPath);
     final formKey = GlobalKey<FormState>();
     final logService = ref.read(logServiceProvider);
+    final pollingManager = ref.read(pollingManagerProvider);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -129,8 +130,14 @@ class RabbiManagementTab extends ConsumerWidget {
                       logService.logUserActivity(
                         'Admin picking target path for rabbi.',
                       );
-                      String? selectedDirectory = await FilePicker.platform
-                          .getDirectoryPath();
+                      String? selectedDirectory;
+                      try {
+                        pollingManager.pausePollingForOperation();
+                        selectedDirectory = await FilePicker.platform
+                            .getDirectoryPath();
+                      } finally {
+                        pollingManager.resumePollingAfterOperation();
+                      }
                       if (selectedDirectory != null) {
                         pathController.text = selectedDirectory;
                         logService.logInfo(

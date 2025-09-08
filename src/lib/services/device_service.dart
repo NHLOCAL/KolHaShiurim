@@ -20,8 +20,24 @@ class DeviceService {
   Stream<List<ConnectedDeviceInfo>> watchConnectedDevices() =>
       _controller.stream.distinct((a, b) => _areEqual(a, b));
   void _startPollingDrives({Duration interval = const Duration(seconds: 5)}) {
+    _pollingTimer?.cancel();
     _refreshDevices();
     _pollingTimer = Timer.periodic(interval, (_) => _refreshDevices());
+  }
+
+  void pausePolling() {
+    if (_pollingTimer?.isActive ?? false) {
+      _pollingTimer?.cancel();
+      _pollingTimer = null;
+      _logService.logInfo('Device polling paused.');
+    }
+  }
+
+  void resumePolling() {
+    if (_pollingTimer == null) {
+      _logService.logInfo('Resuming device polling.');
+      _startPollingDrives();
+    }
   }
 
   Future<void> _refreshDevices() async {
@@ -85,7 +101,9 @@ class DeviceService {
           calloc.free(rootPtr);
         }
       }
-      _controller.add(devices);
+      if (!_controller.isClosed) {
+        _controller.add(devices);
+      }
     } catch (e, st) {
       _logService.logError('Error enumerating drives', e, st);
     }
@@ -139,7 +157,10 @@ class DeviceService {
 
   void dispose() {
     _pollingTimer?.cancel();
-    if (!_controller.isClosed) _controller.close();
+    _pollingTimer = null;
+    if (!_controller.isClosed) {
+      _controller.close();
+    }
     _logService.logInfo('DeviceService disposed.');
   }
 }
