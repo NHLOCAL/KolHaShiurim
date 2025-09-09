@@ -143,8 +143,6 @@ class RabbiManagementTab extends ConsumerWidget {
                         logService.logInfo(
                           'Selected target path: $selectedDirectory',
                         );
-                      } else {
-                        logService.logInfo('Target path picker cancelled.');
                       }
                     },
                   ),

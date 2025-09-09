@@ -58,7 +58,17 @@ class SettingsTab extends ConsumerWidget {
           );
         }
       } else {
-        logService.logInfo('Settings backup save was cancelled by user.');
+        logService.logInfo(
+          'Settings backup was cancelled or no file selected.',
+        );
+        if (context.mounted) {
+          scaffoldMessenger.showSnackBar(
+            const SnackBar(
+              content: Text('גיבוי בוטל או לא נבחר קובץ.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
       }
     } catch (e, st) {
       logService.logError('Failed to backup settings', e, st);

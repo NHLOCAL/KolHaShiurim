@@ -20,20 +20,24 @@ bool FlutterWindow::OnCreate() {
   // creation / destruction in the startup path.
   flutter_controller_ = std::make_unique<flutter::FlutterViewController>(
       frame.right - frame.left, frame.bottom - frame.top, project_);
-  // Ensure that basic setup of the controller was successful.
   if (!flutter_controller_->engine() || !flutter_controller_->view()) {
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
-  flutter_controller_->engine()->SetNextFrameCallback([&]() {
-    this->Show();
-  });
+  // NOTE: Removed the SetNextFrameCallback that unconditionally called Show().
+  // Calling Show() here caused the native window to become visible as soon as
+  // the first frame completed, producing a visible "flash" even when the
+  // application intended to start hidden (silent/tray mode). The window will
+  // now remain hidden until an explicit call to Show() is made (for example,
+  // from Dart via the window_manager plugin).
+  //
+  // If you want to conditionally show on first frame, implement a flag in
+  // your native runner or expose a mechanism that checks an environment
+  // variable or command-line argument and calls Show() only when desired.
 
-  // Flutter can complete the first frame before the "show window" callback is
-  // registered. The following call ensures a frame is pending to ensure the
-  // window is shown. It is a no-op if the first frame hasn't completed yet.
+  // Ensure a frame is pending — no-op if the first frame hasn't completed yet.
   flutter_controller_->ForceRedraw();
 
   return true;
@@ -51,7 +55,6 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
-  // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
     std::optional<LRESULT> result =
         flutter_controller_->HandleTopLevelWindowProc(hwnd, message, wparam,

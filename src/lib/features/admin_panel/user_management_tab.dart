@@ -376,39 +376,34 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
     } finally {
       pollingManager.resumePollingAfterOperation();
     }
-    if (selectedDirectory != null) {
-      if (!selectedDirectory.startsWith(initialDirectory)) {
-        if (mounted) {
-          _logService.logWarning(
-            'Selected directory ($selectedDirectory) is not within rabbi\'s base path ($initialDirectory).',
-          );
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('יש לבחור תיקיה בתוך תיקיית הרב המוגדרת.'),
-            ),
-          );
-        }
-        return;
-      }
-      String relativePath = selectedDirectory.substring(
-        initialDirectory.length,
-      );
-      relativePath = relativePath.replaceAll(r'\', '/');
-      if (relativePath.startsWith('/')) {
-        relativePath = relativePath.substring(1);
-      }
-      if (relativePath.endsWith('/')) {
-        relativePath = relativePath.substring(0, relativePath.length - 1);
-      }
+    if (selectedDirectory == null ||
+        !selectedDirectory.startsWith(initialDirectory)) {
       if (mounted) {
-        _logService.logInfo(
-          'Selected relative path for rabbi ${rabbi.name}: $relativePath',
+        _logService.logWarning(
+          'Selected directory ($selectedDirectory) is not within rabbi\'s base path ($initialDirectory).',
         );
-        _pathControllers[rabbi.id]?[pathIndex].text = relativePath;
-        setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('יש לבחור תיקיה בתוך תיקיית הרב המוגדרת.'),
+          ),
+        );
       }
-    } else {
-      _logService.logInfo('Directory picker for specific path cancelled.');
+      return;
+    }
+    String relativePath = selectedDirectory.substring(initialDirectory.length);
+    relativePath = relativePath.replaceAll(r'\', '/');
+    if (relativePath.startsWith('/')) {
+      relativePath = relativePath.substring(1);
+    }
+    if (relativePath.endsWith('/')) {
+      relativePath = relativePath.substring(0, relativePath.length - 1);
+    }
+    if (mounted) {
+      _logService.logInfo(
+        'Selected relative path for rabbi ${rabbi.name}: $relativePath',
+      );
+      _pathControllers[rabbi.id]?[pathIndex].text = relativePath;
+      setState(() {});
     }
   }
 

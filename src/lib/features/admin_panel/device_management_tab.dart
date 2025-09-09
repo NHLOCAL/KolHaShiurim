@@ -249,10 +249,6 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
       pollingManager.resumePollingAfterOperation();
     }
     try {
-      if (selectedPath == null) {
-        _logService.logInfo('Device location cancelled by user.');
-        return;
-      }
       _logService.logInfo('User selected path: $selectedPath');
       final connectedDevices = await ref.read(connectedDevicesProvider.future);
       if (!mounted) return;
@@ -279,7 +275,7 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
       }
       final validDrive = foundDrive;
       String relativePath = p.relative(
-        selectedPath,
+        selectedPath!,
         from: validDrive.mountPath,
       );
       if (relativePath == '.') {
