@@ -32,19 +32,12 @@ class SettingsTab extends ConsumerWidget {
       final jsonString = const JsonEncoder.withIndent('  ').convert(backupData);
       final fileName =
           'torah_shiurim_backup_${DateTime.now().toIso8601String().split('T').first}.json';
-      final pollingManager = ref.read(pollingManagerProvider);
-      String? result;
-      try {
-        pollingManager.pausePollingForOperation();
-        result = await FilePicker.platform.saveFile(
-          dialogTitle: 'שמור קובץ גיבוי',
-          fileName: fileName,
-          type: FileType.custom,
-          allowedExtensions: ['json'],
-        );
-      } finally {
-        pollingManager.resumePollingAfterOperation();
-      }
+      final result = await FilePicker.platform.saveFile(
+        dialogTitle: 'שמור קובץ גיבוי',
+        fileName: fileName,
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+      );
       if (result != null) {
         final file = File(result);
         await file.writeAsString(jsonString);
@@ -116,17 +109,10 @@ class SettingsTab extends ConsumerWidget {
       return;
     }
     try {
-      final pollingManager = ref.read(pollingManagerProvider);
-      FilePickerResult? result;
-      try {
-        pollingManager.pausePollingForOperation();
-        result = await FilePicker.platform.pickFiles(
-          type: FileType.custom,
-          allowedExtensions: ['json'],
-        );
-      } finally {
-        pollingManager.resumePollingAfterOperation();
-      }
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+      );
       if (result == null || result.files.single.path == null) {
         logService.logInfo('Settings restore file picker was cancelled.');
         return;

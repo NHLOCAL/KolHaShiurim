@@ -47,17 +47,10 @@ class _LicenseScreenState extends ConsumerState<LicenseScreen> {
   }
 
   Future<void> _loadFile() async {
-    final pollingManager = ref.read(pollingManagerProvider);
-    FilePickerResult? result;
-    try {
-      pollingManager.pausePollingForOperation();
-      result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['json', 'lic'],
-      );
-    } finally {
-      pollingManager.resumePollingAfterOperation();
-    }
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['json', 'lic'],
+    );
     if (result != null) {
       try {
         final content = await File(result.files.single.path!).readAsString();
@@ -77,19 +70,12 @@ class _LicenseScreenState extends ConsumerState<LicenseScreen> {
     if (_hardwareFingerprint.startsWith('טוען')) return;
     try {
       const fileName = 'hardware_fingerprint.txt';
-      final pollingManager = ref.read(pollingManagerProvider);
-      String? result;
-      try {
-        pollingManager.pausePollingForOperation();
-        result = await FilePicker.platform.saveFile(
-          dialogTitle: 'שמור קובץ טביעת אצבע',
-          fileName: fileName,
-          type: FileType.custom,
-          allowedExtensions: ['txt'],
-        );
-      } finally {
-        pollingManager.resumePollingAfterOperation();
-      }
+      final result = await FilePicker.platform.saveFile(
+        dialogTitle: 'שמור קובץ טביעת אצבע',
+        fileName: fileName,
+        type: FileType.custom,
+        allowedExtensions: ['txt'],
+      );
       if (result != null) {
         final file = File(result);
         await file.writeAsString(_hardwareFingerprint);

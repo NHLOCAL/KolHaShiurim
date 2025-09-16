@@ -7,7 +7,6 @@ import 'package:kol_hashiurim/services/device_service.dart';
 import 'package:kol_hashiurim/services/file_service.dart';
 import 'package:kol_hashiurim/services/log_service.dart';
 import 'package:kol_hashiurim/models/device_info.dart';
-import 'package:kol_hashiurim/services/polling_manager.dart';
 import 'package:kol_hashiurim/tray/window_actions.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -33,11 +32,6 @@ final fileServiceProvider = Provider<FileService>((ref) {
   final logService = ref.watch(logServiceProvider);
   return FileService(logService);
 });
-final pollingManagerProvider = Provider<PollingManager>((ref) {
-  final deviceService = ref.watch(deviceServiceProvider);
-  final logService = ref.watch(logServiceProvider);
-  return PollingManager(deviceService, logService);
-});
 final connectedDevicesProvider = StreamProvider<List<ConnectedDeviceInfo>>((
   ref,
 ) {
@@ -51,10 +45,15 @@ final authStateProvider =
 class AuthStateNotifier extends StateNotifier<AppUserState> {
   final Ref _ref;
   late final LogService _logService;
+  late final DeviceService _deviceService;
   AuthStateNotifier(this._ref) : super(const AppUserState.loggedOut()) {
     _logService = _ref.read(logServiceProvider);
+    _deviceService = _ref.read(deviceServiceProvider);
     _listenForDevices();
-    _logService.logInfo('Application started, listening for device changes.');
+    _deviceService.startPolling();
+    _logService.logInfo(
+      'Application started, device polling initiated for background detection.',
+    );
   }
   void _listenForDevices() {
     _ref.listen<
@@ -113,12 +112,14 @@ class AuthStateNotifier extends StateNotifier<AppUserState> {
 
   Future<void> loginAsAdmin() async {
     _logService.logUserActivity('Admin login requested.');
+    _deviceService.stopPolling();
     state = const AppUserState.admin();
     WindowActions.showAdminPanel();
   }
 
   void logout() {
     _logService.logUserActivity('User logged out.');
+    _deviceService.startPolling();
     state = const AppUserState.loggedOut();
     WindowActions.hide(resizeToAdmin: false);
   }

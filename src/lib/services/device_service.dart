@@ -13,34 +13,42 @@ class DeviceService {
   final _controller = StreamController<List<ConnectedDeviceInfo>>.broadcast();
   final LogService _logService;
   Timer? _pollingTimer;
+  static const _pollingInterval = Duration(seconds: 5);
   DeviceService(this._logService) {
     _logService.logInfo('DeviceService initialized.');
-    _startPollingDrives();
   }
   Stream<List<ConnectedDeviceInfo>> watchConnectedDevices() =>
       _controller.stream.distinct((a, b) => _areEqual(a, b));
-  void _startPollingDrives({Duration interval = const Duration(seconds: 5)}) {
-    _pollingTimer?.cancel();
-    _refreshDevices();
-    _pollingTimer = Timer.periodic(interval, (_) => _refreshDevices());
+  Future<List<ConnectedDeviceInfo>> getConnectedDevices() async {
+    return _getDevices();
   }
 
-  void pausePolling() {
+  void startPolling() {
+    if (_pollingTimer?.isActive ?? false) {
+      _logService.logInfo('Polling is already active.');
+      return;
+    }
+    _logService.logInfo('Starting device polling.');
+    _refreshDevices();
+    _pollingTimer = Timer.periodic(_pollingInterval, (_) => _refreshDevices());
+  }
+
+  void stopPolling() {
     if (_pollingTimer?.isActive ?? false) {
       _pollingTimer?.cancel();
       _pollingTimer = null;
-      _logService.logInfo('Device polling paused.');
-    }
-  }
-
-  void resumePolling() {
-    if (_pollingTimer == null) {
-      _logService.logInfo('Resuming device polling.');
-      _startPollingDrives();
+      _logService.logInfo('Device polling stopped.');
     }
   }
 
   Future<void> _refreshDevices() async {
+    final devices = await _getDevices();
+    if (!_controller.isClosed) {
+      _controller.add(devices);
+    }
+  }
+
+  Future<List<ConnectedDeviceInfo>> _getDevices() async {
     try {
       final devices = <ConnectedDeviceInfo>[];
       final mask = GetLogicalDrives();
@@ -101,11 +109,10 @@ class DeviceService {
           calloc.free(rootPtr);
         }
       }
-      if (!_controller.isClosed) {
-        _controller.add(devices);
-      }
+      return devices;
     } catch (e, st) {
       _logService.logError('Error enumerating drives', e, st);
+      return [];
     }
   }
 
@@ -156,8 +163,7 @@ class DeviceService {
   }
 
   void dispose() {
-    _pollingTimer?.cancel();
-    _pollingTimer = null;
+    stopPolling();
     if (!_controller.isClosed) {
       _controller.close();
     }

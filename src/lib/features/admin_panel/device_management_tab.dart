@@ -195,7 +195,9 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
       'Attempting to find current mount path for device serial: ${widget.device!.serialNumber}',
     );
     try {
-      final devices = await ref.read(connectedDevicesProvider.future);
+      final devices = await ref
+          .read(deviceServiceProvider)
+          .getConnectedDevices();
       final ConnectedDeviceInfo connectedDevice = devices.firstWhere(
         (d) => d.serialNumber == widget.device!.serialNumber,
       );
@@ -237,25 +239,27 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
   Future<void> _locateDevice() async {
     setState(() => _isLoading = true);
     _logService.logUserActivity('Admin initiated device location process.');
-    final pollingManager = ref.read(pollingManagerProvider);
-    String? selectedPath;
     try {
-      pollingManager.pausePollingForOperation();
-      selectedPath = await FilePicker.platform.getDirectoryPath(
+      _logService.logInfo(
+        'Pre-fetching connected devices before showing dialog.',
+      );
+      final connectedDevices = await ref
+          .read(deviceServiceProvider)
+          .getConnectedDevices();
+      if (!mounted) return;
+      final selectedPath = await FilePicker.platform.getDirectoryPath(
         lockParentWindow: true,
         dialogTitle: 'בחר תיקיית מקור מההתקן החיצוני',
       );
-    } finally {
-      pollingManager.resumePollingAfterOperation();
-    }
-    try {
+      if (selectedPath == null) {
+        _logService.logInfo('User cancelled directory picker.');
+        return;
+      }
       _logService.logInfo('User selected path: $selectedPath');
-      final connectedDevices = await ref.read(connectedDevicesProvider.future);
-      if (!mounted) return;
       ConnectedDeviceInfo? foundDrive;
       try {
         foundDrive = connectedDevices.firstWhere(
-          (d) => selectedPath!.startsWith(d.mountPath),
+          (d) => selectedPath.startsWith(d.mountPath),
         );
       } on StateError {
         foundDrive = null;
@@ -275,7 +279,7 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
       }
       final validDrive = foundDrive;
       String relativePath = p.relative(
-        selectedPath!,
+        selectedPath,
         from: validDrive.mountPath,
       );
       if (relativePath == '.') {
