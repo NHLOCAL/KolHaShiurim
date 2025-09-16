@@ -27,7 +27,8 @@ class _LicenseScreenState extends ConsumerState<LicenseScreen> {
   }
 
   Future<void> _loadFingerprint() async {
-    final fp = await widget.licenseManager.getHardwareFingerprint();
+    final logService = ref.read(logServiceProvider);
+    final fp = await widget.licenseManager.getHardwareFingerprint(logService);
     if (mounted) {
       setState(() {
         _hardwareFingerprint = fp;
