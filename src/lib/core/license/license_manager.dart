@@ -37,37 +37,44 @@ class LicenseManager {
     return File(p.join(appDir.path, 'app.lic'));
   }
 
-  Future<String?> _getWmicInfo(String query, LogService logService) async {
+  Future<String?> _getPowerShellInfo(
+    String command,
+    LogService logService,
+  ) async {
     try {
-      final result = await Process.run('wmic', query.split(' '));
+      final result = await Process.run('powershell.exe', ['-Command', command]);
       if (result.exitCode == 0 && result.stdout is String) {
-        final lines = result.stdout.toString().trim().split(
-          RegExp(r'(\r\n|\r|\n)'),
-        );
-        if (lines.length > 1) {
-          final value = lines[1].trim();
-          if (value.isNotEmpty &&
-              !value.toLowerCase().contains('to be filled by o.e.m.')) {
-            await logService.logInfo('WMIC query "$query" success: $value');
-            return value;
-          }
+        final value = result.stdout.toString().trim();
+        if (value.isNotEmpty &&
+            !value.toLowerCase().contains('to be filled by o.e.m.')) {
+          await logService.logInfo(
+            'PowerShell command "$command" success: $value',
+          );
+          return value;
         }
       }
       await logService.logWarning(
-        'WMIC query "$query" failed or returned empty. Exit code: ${result.exitCode}, StdErr: ${result.stderr}',
+        'PowerShell command "$command" failed or returned empty. Exit code: ${result.exitCode}, StdErr: ${result.stderr}',
       );
       return null;
     } catch (e, st) {
-      await logService.logError('Exception running WMIC query "$query"', e, st);
+      await logService.logError(
+        'Exception running PowerShell command "$command"',
+        e,
+        st,
+      );
       return null;
     }
   }
 
   Future<String> getHardwareFingerprint(LogService logService) async {
     await logService.logInfo("--- Generating Hardware Fingerprint ---");
-    final cpuId = await _getWmicInfo('cpu get processorid', logService);
-    final baseboardSerial = await _getWmicInfo(
-      'baseboard get serialnumber',
+    final cpuId = await _getPowerShellInfo(
+      '(Get-CimInstance Win32_Processor).ProcessorId',
+      logService,
+    );
+    final baseboardSerial = await _getPowerShellInfo(
+      '(Get-CimInstance Win32_BaseBoard).SerialNumber',
       logService,
     );
     final volName = calloc<Uint16>(MAX_PATH).cast<Utf16>();
