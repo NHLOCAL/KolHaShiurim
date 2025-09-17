@@ -1,7 +1,3 @@
-// main.dart (מעודכן)
-// מטרת הקובץ: לוודא שהיישום לא יופיע על המסך ב-startSilent,
-// ולנהל במפורש מתי להראות את החלון.
-
 import 'dart:ffi' as ffi;
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -43,7 +39,7 @@ void main(List<String> args) async {
   // הגדרת אפשרויות החלון (לא כולל show:false מכיוון שלא תמיד קיים
   // הפרמטר הזה בתצורות שונות של window_manager; נסתמך על native runner
   // שלא יוצר WS_VISIBLE כפי ששינינו ברמת runner).
-  final WindowOptions windowOptions = const WindowOptions(
+  const WindowOptions windowOptions = WindowOptions(
     size: Size(1280, 720),
     center: true,
     title: 'קול השיעורים',

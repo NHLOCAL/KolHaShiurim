@@ -10,7 +10,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pointycastle/export.dart';
 import 'package:kol_hashiurim/services/log_service.dart';
 import 'package:win32/win32.dart';
-import 'package:windows_system_info/windows_system_info.dart';
 
 extension Uint8ArrayExtension on Array<Uint8> {
   List<int> toList(int length) {
@@ -77,61 +76,26 @@ class LicenseManager {
       '(Get-CimInstance Win32_BaseBoard).SerialNumber',
       logService,
     );
-    final volName = calloc<Uint16>(MAX_PATH).cast<Utf16>();
-    final fsName = calloc<Uint16>(MAX_PATH).cast<Utf16>();
-    final serialPtr = calloc<DWORD>();
-    String diskSerial = '';
-    if (GetVolumeInformation(
-          TEXT('C:\\'),
-          volName,
-          MAX_PATH,
-          serialPtr,
-          nullptr,
-          nullptr,
-          fsName,
-          MAX_PATH,
-        ) !=
-        0) {
-      diskSerial = serialPtr.value.toRadixString(16).toUpperCase();
-      await logService.logInfo("Disk serial: $diskSerial");
-    } else {
-      await logService.logWarning("Failed to get disk serial.");
-    }
-    calloc.free(volName);
-    calloc.free(fsName);
-    calloc.free(serialPtr);
-    String macsString = '';
-    try {
-      await WindowsSystemInfo.initWindowsInfo(
-        requiredValues: [WindowsSystemInfoFeat.network],
-      );
-      final adapters = WindowsSystemInfo.network;
-      final macs = adapters
-          .map(
-            (a) => a.mac.replaceAll(RegExp(r'[^A-Fa-f0-9]'), '').toUpperCase(),
-          )
-          .where(
-            (mac) =>
-                mac.isNotEmpty &&
-                mac != '000000000000' &&
-                !mac.startsWith('02'),
-          )
-          .toSet()
-          .toList();
-      macs.sort();
-      macsString = macs.join(',');
-      await logService.logInfo("Sorted MACs: $macsString");
-    } catch (e, st) {
-      await logService.logError("Failed to get MAC addresses", e, st);
-    }
+    final systemUuid = await _getPowerShellInfo(
+      '(Get-CimInstance Win32_ComputerSystemProduct).UUID',
+      logService,
+    );
+    final diskSerial = await _getPowerShellInfo(
+      r'(Get-CimInstance Win32_DiskDrive | Where-Object { $_.Index -eq 0 }).SerialNumber',
+      logService,
+    );
     final components = <String>[];
     if (cpuId != null && cpuId.isNotEmpty) components.add('cpu:$cpuId');
+    if (systemUuid != null && systemUuid.isNotEmpty) {
+      components.add('uuid:$systemUuid');
+    }
+    if (diskSerial != null && diskSerial.isNotEmpty) {
+      components.add('disk:$diskSerial');
+    }
     if (baseboardSerial != null && baseboardSerial.isNotEmpty) {
       components.add('board:$baseboardSerial');
     }
-    components.add('disk:$diskSerial');
-    components.add('macs:$macsString');
-    if (cpuId == null && baseboardSerial == null) {
+    if (cpuId == null && baseboardSerial == null && systemUuid == null) {
       final sysInfo = calloc<SYSTEM_INFO>();
       GetSystemInfo(sysInfo);
       final fallbackCpuId =
