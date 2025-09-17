@@ -4,8 +4,8 @@
 
 [Setup]
 AppName=קול השיעורים
-AppVerName=קול השיעורים 0.1.3
-AppVersion=0.1.3
+AppVerName=קול השיעורים 0.1.4
+AppVersion=0.1.4
 AppPublisher=זה קל
 AppPublisherURL=https://nhlocal.github.io
 AppSupportURL=https://nhlocal.github.io
