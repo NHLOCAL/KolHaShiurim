@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -34,6 +35,8 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
   AppSetting? _appSettings;
   late final LogService _logService;
   late final AudioPlayer _audioPlayer;
+  ProviderSubscription<AsyncValue<List<UserPermissionInfo>>>?
+      _allowedRabbisSubscription;
 
   final List<List<String>> _hebrewKeys = const [
     ['-', '0', '9', '8', '7', '6', '5', '4', '3', '2', '1'],
@@ -49,6 +52,12 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
     _audioPlayer = AudioPlayer();
     _loadSettings();
     _logService.logInfo('Transfer Details Panel initialized.');
+    _allowedRabbisSubscription = ref.listen<AsyncValue<List<UserPermissionInfo>>>(
+      allowedRabbisProvider,
+      (_, next) {
+        next.whenData(_syncSelectedPermission);
+      },
+    );
   }
 
   @override
@@ -58,16 +67,60 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       _audioPlayer.stop();
       if (widget.selectedFile != null) {
         _resetForm();
-        try {
-          _audioPlayer.setFilePath(widget.selectedFile!.path);
-        } catch (e) {
-          _logService.logError(
-            "Error setting audio source",
-            e,
-            StackTrace.current,
-          );
-        }
+        unawaited(
+          _audioPlayer
+              .setFilePath(widget.selectedFile!.path)
+              .catchError((error, stackTrace) {
+            _logService.logError(
+              "Error setting audio source",
+              error,
+              stackTrace is StackTrace ? stackTrace : StackTrace.current,
+            );
+          }),
+        );
       }
+    }
+  }
+
+  void _syncSelectedPermission(List<UserPermissionInfo> permissions) {
+    if (_selectedPermission == null) {
+      return;
+    }
+
+    final currentRabbiId = _selectedPermission!.rabbi.id;
+    UserPermissionInfo? updatedPermission;
+    for (final permission in permissions) {
+      if (permission.rabbi.id == currentRabbiId) {
+        updatedPermission = permission;
+        break;
+      }
+    }
+
+    if (updatedPermission == null) {
+      if (mounted) {
+        setState(() {
+          _selectedPermission = null;
+          _selectedSpecificPath = null;
+        });
+      }
+      return;
+    }
+
+    final availablePaths = updatedPermission.specificPaths;
+    String? nextSpecificPath = _selectedSpecificPath;
+    if (nextSpecificPath != null && !availablePaths.contains(nextSpecificPath)) {
+      nextSpecificPath = availablePaths.length == 1 ? availablePaths.first : null;
+    }
+
+    if (mounted) {
+      setState(() {
+        _selectedPermission = updatedPermission;
+        if (availablePaths.length == 1) {
+          _selectedSpecificPath = availablePaths.first;
+        } else {
+          _selectedSpecificPath = nextSpecificPath;
+        }
+      });
     }
   }
 
@@ -90,6 +143,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
   void dispose() {
     _topicController.dispose();
     _audioPlayer.dispose();
+    _allowedRabbisSubscription?.close();
     super.dispose();
   }
 
