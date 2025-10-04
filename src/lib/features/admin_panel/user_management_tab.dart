@@ -24,7 +24,7 @@ class UserManagementTab extends ConsumerWidget {
       ),
       body: usersAsync.when(
         data: (users) => ListView.builder(
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.fromLTRB(8, 8, 8, 88),
           itemCount: users.length,
           itemBuilder: (context, index) {
             final user = users[index];

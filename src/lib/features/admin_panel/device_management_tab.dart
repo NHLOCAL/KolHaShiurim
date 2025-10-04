@@ -9,7 +9,6 @@ import 'package:kol_hashiurim/core/providers/providers.dart';
 import 'package:kol_hashiurim/models/device_info.dart';
 import 'package:kol_hashiurim/services/log_service.dart';
 import 'package:path/path.dart' as p;
-
 class DeviceManagementTab extends ConsumerWidget {
   const DeviceManagementTab({super.key});
   @override
@@ -27,7 +26,7 @@ class DeviceManagementTab extends ConsumerWidget {
       ),
       body: devicesAsync.when(
         data: (devices) => ListView.builder(
-          padding: const EdgeInsets.all(8.0),
+          padding: const EdgeInsets.fromLTRB(8.0, 8.0, 8.0, 88.0),
           itemCount: devices.length,
           itemBuilder: (context, index) {
             final deviceWithUser = devices[index];
@@ -99,7 +98,6 @@ class DeviceManagementTab extends ConsumerWidget {
       ),
     );
   }
-
   void _showDeviceDialog(
     BuildContext context,
     WidgetRef ref, {
@@ -111,7 +109,6 @@ class DeviceManagementTab extends ConsumerWidget {
       builder: (context) => _DeviceDialog(device: device),
     );
   }
-
   void _showDeleteConfirmation(
     BuildContext context,
     String itemType,
@@ -146,14 +143,12 @@ class DeviceManagementTab extends ConsumerWidget {
     );
   }
 }
-
 class _DeviceDialog extends ConsumerStatefulWidget {
   final Device? device;
   const _DeviceDialog({this.device});
   @override
   ConsumerState<_DeviceDialog> createState() => __DeviceDialogState();
 }
-
 class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
   late TextEditingController _serialController;
   late TextEditingController _sourcePathController;
@@ -181,14 +176,12 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
       _findCurrentMountPath();
     }
   }
-
   @override
   void dispose() {
     _serialController.dispose();
     _sourcePathController.dispose();
     super.dispose();
   }
-
   Future<void> _findCurrentMountPath() async {
     if (widget.device == null) return;
     _logService.logInfo(
@@ -215,7 +208,6 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
       );
     }
   }
-
   String _generateRandomSerial() {
     final random = Random();
     const chars = 'ABCDEF0123456789';
@@ -235,7 +227,6 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
     _logService.logInfo('Generated random serial number: $generatedSerial');
     return generatedSerial;
   }
-
   Future<void> _locateDevice() async {
     setState(() => _isLoading = true);
     _logService.logUserActivity('Admin initiated device location process.');
@@ -312,7 +303,6 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
       }
     }
   }
-
   Future<void> _changeDeviceSerial() async {
     if (!(_formKey.currentState?.validate() ?? false)) {
       _logService.logWarning(
@@ -361,7 +351,6 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
       }
     }
   }
-
   Future<void> _saveDevice() async {
     if (_formKey.currentState!.validate()) {
       if (_mountPath == null) {
@@ -424,7 +413,6 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
       );
     }
   }
-
   @override
   Widget build(BuildContext context) {
     final usersAsync = ref.watch(allUsersProvider);

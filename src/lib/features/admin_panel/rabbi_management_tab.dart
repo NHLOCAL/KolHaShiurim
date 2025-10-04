@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kol_hashiurim/core/database/database.dart';
 import 'package:kol_hashiurim/core/providers/providers.dart';
-
 class RabbiManagementTab extends ConsumerWidget {
   const RabbiManagementTab({super.key});
   @override
@@ -22,7 +21,7 @@ class RabbiManagementTab extends ConsumerWidget {
       ),
       body: rabbisAsync.when(
         data: (rabbis) => ListView.builder(
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.fromLTRB(8, 8, 8, 88),
           itemCount: rabbis.length,
           itemBuilder: (context, index) {
             final rabbi = rabbis[index];
@@ -92,7 +91,6 @@ class RabbiManagementTab extends ConsumerWidget {
       ),
     );
   }
-
   void _showRabbiDialog(BuildContext context, WidgetRef ref, {Rabbi? rabbi}) {
     final nameController = TextEditingController(text: rabbi?.name);
     final pathController = TextEditingController(text: rabbi?.targetPath);
@@ -213,7 +211,6 @@ class RabbiManagementTab extends ConsumerWidget {
       ),
     );
   }
-
   void _showDeleteConfirmation(
     BuildContext context,
     String itemType,
