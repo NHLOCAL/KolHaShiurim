@@ -35,8 +35,6 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
   AppSetting? _appSettings;
   late final LogService _logService;
   late final AudioPlayer _audioPlayer;
-  ProviderSubscription<AsyncValue<List<UserPermissionInfo>>>?
-      _allowedRabbisSubscription;
 
   final List<List<String>> _hebrewKeys = const [
     ['-', '0', '9', '8', '7', '6', '5', '4', '3', '2', '1'],
@@ -52,11 +50,10 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
     _audioPlayer = AudioPlayer();
     _loadSettings();
     _logService.logInfo('Transfer Details Panel initialized.');
-    _allowedRabbisSubscription = ref.listen<AsyncValue<List<UserPermissionInfo>>>(
+    ref.read(allowedRabbisProvider).whenData(_syncSelectedPermission);
+    ref.listen<AsyncValue<List<UserPermissionInfo>>>(
       allowedRabbisProvider,
-      (_, next) {
-        next.whenData(_syncSelectedPermission);
-      },
+      (_, next) => next.whenData(_syncSelectedPermission),
     );
   }
 
@@ -143,7 +140,6 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
   void dispose() {
     _topicController.dispose();
     _audioPlayer.dispose();
-    _allowedRabbisSubscription?.close();
     super.dispose();
   }
 

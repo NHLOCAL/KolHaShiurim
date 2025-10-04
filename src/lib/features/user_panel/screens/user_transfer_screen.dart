@@ -15,50 +15,50 @@ class UserTransferScreen extends ConsumerStatefulWidget {
 
 class _UserTransferScreenState extends ConsumerState<UserTransferScreen> {
   File? _selectedFile;
-  late final ProviderSubscription<AppUserState> _authSubscription;
-  ProviderSubscription<AsyncValue<List<File>>>? _sourceFilesSubscription;
 
   @override
   void initState() {
     super.initState();
-    _authSubscription = ref.listen<AppUserState>(
+    _handleAuthState(ref.read(authStateProvider));
+    ref.listen<AppUserState>(
       authStateProvider,
-      (_, next) {
-        next.maybeWhen(
-          user: (user, device, mountPath) {
-            if (mounted && _selectedFile != null) {
-              setState(() => _selectedFile = null);
-            }
-          },
-          orElse: () {
-            if (mounted && _selectedFile != null) {
-              setState(() => _selectedFile = null);
-            }
-          },
-        );
-      },
-      fireImmediately: true,
+      (_, next) => _handleAuthState(next),
     );
-    _sourceFilesSubscription = ref.listen<AsyncValue<List<File>>>(
+
+    ref.read(sourceFilesProvider).whenData(_handleSourceFiles);
+    ref.listen<AsyncValue<List<File>>>(
       sourceFilesProvider,
-      (_, next) {
-        next.whenData((files) {
-          final current = _selectedFile;
-          if (current != null &&
-              !files.any((file) => file.path == current.path) &&
-              mounted) {
-            setState(() => _selectedFile = null);
-          }
-        });
-      },
+      (_, next) => next.whenData(_handleSourceFiles),
     );
   }
 
   @override
   void dispose() {
-    _authSubscription.close();
-    _sourceFilesSubscription?.close();
     super.dispose();
+  }
+
+  void _handleAuthState(AppUserState state) {
+    state.maybeWhen(
+      user: (user, device, mountPath) {
+        if (mounted && _selectedFile != null) {
+          setState(() => _selectedFile = null);
+        }
+      },
+      orElse: () {
+        if (mounted && _selectedFile != null) {
+          setState(() => _selectedFile = null);
+        }
+      },
+    );
+  }
+
+  void _handleSourceFiles(List<File> files) {
+    final current = _selectedFile;
+    if (current != null &&
+        !files.any((file) => file.path == current.path) &&
+        mounted) {
+      setState(() => _selectedFile = null);
+    }
   }
 
   @override
