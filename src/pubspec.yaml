@@ -1,0 +1,58 @@
+name: kol_hashiurim
+description: "A secure transfer system for Torah shiurim recordings."
+publish_to: 'none'
+version: 0.1.4+3
+
+environment:
+  sdk: '>=3.8.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  device_manager: ^0.0.7
+  cupertino_icons: ^1.0.6
+  flutter_riverpod: ^2.5.1
+  virtual_keyboard_custom_layout: ^1.0.1
+  drift: ^2.17.0
+  sqlite3_flutter_libs: ^0.5.21
+  path_provider: any
+  path: any
+  file_picker: ^8.0.0+1
+  go_router: ^13.2.4
+  freezed_annotation: ^2.4.1
+  disk_space: ^0.2.1
+  kosher_dart: ^2.0.17
+  material_hebrew_date_picker: ^1.2.2
+  virtual_keyboard_multi_language: ^1.0.0
+  ffi: ^2.1.2
+  window_manager: ^0.4.3
+  tray_manager: ^0.5.0
+  win32: ^5.14.0
+  pointycastle: any
+  basic_utils: any
+  windows_system_info: ^0.0.4
+  canonical_json: ^1.1.2
+  just_audio: ^0.9.36
+  just_audio_windows: ^0.2.1
+  url_launcher: ^6.2.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  build_runner: ^2.4.9
+  drift_dev: ^2.17.0
+  freezed: ^2.5.2
+  flutter_launcher_icons: ^0.13.1
+
+dependency_overrides:
+  intl: 0.20.2
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/icons/app_icon.ico
+    - assets/keys/public.pem
+    - assets/bin/Volumeid.exe
