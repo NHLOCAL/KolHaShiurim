@@ -1,11 +1,9 @@
 import 'dart:async';
-import 'dart:ffi';
+import 'dart:convert';
 import 'dart:io';
-import 'package:ffi/ffi.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-import 'package:win32/win32.dart';
 import 'package:kol_hashiurim/models/device_info.dart';
 import 'package:kol_hashiurim/services/log_service.dart';
 
@@ -15,6 +13,14 @@ class DeviceService {
   Timer? _pollingTimer;
   Future<void>? _scanInProgress;
   static const _pollingInterval = Duration(seconds: 5);
+  static const _powershellDeviceQuery = r'''
+$ErrorActionPreference = 'Stop'
+@(
+  Get-CimInstance Win32_LogicalDisk |
+    Where-Object { $_.DriveType -eq 2 -and $_.VolumeSerialNumber } |
+    Select-Object -Property DeviceID, VolumeSerialNumber
+) | ConvertTo-Json -Compress
+''';
   DeviceService(this._logService) {
     _logService.logInfo('DeviceService initialized.');
   }
@@ -55,121 +61,113 @@ class DeviceService {
     }
     final completer = Completer<void>();
     _scanInProgress = completer.future;
-    const suppressedErrors = SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX;
-    final previousThreadErrorMode = calloc<Uint32>();
-    int? previousProcessErrorMode;
-    var threadErrorModeChanged = false;
     try {
-      final setThreadResult =
-          SetThreadErrorMode(suppressedErrors, previousThreadErrorMode);
-      if (setThreadResult != 0) {
-        threadErrorModeChanged = true;
-      } else {
-        previousProcessErrorMode = SetErrorMode(suppressedErrors);
-        if (previousProcessErrorMode == 0) {
-          final error = GetLastError();
-          if (error != NO_ERROR) {
-            _logService.logWarning(
-              'Failed to configure critical-error suppression. Win32 Error: $error',
-            );
-          }
-        }
-      }
-      final devices = <ConnectedDeviceInfo>[];
-      final mask = GetLogicalDrives();
-      if (mask == 0) {
-        final error = GetLastError();
+      final result = await Process.run(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-NonInteractive',
+          '-Command',
+          _powershellDeviceQuery,
+        ],
+        runInShell: true,
+      );
+      if (result.exitCode != 0) {
+        final errorOutput = _decodeProcessOutput(result.stderr);
         _logService.logError(
-          'GetLogicalDrives failed.',
-          'Win32 Error: $error',
+          'Failed to enumerate removable drives via PowerShell.',
+          'ExitCode: ${result.exitCode}, StdErr: $errorOutput',
         );
-        return devices;
+        return <ConnectedDeviceInfo>[];
       }
-      for (var i = 0; i < 26; i++) {
-        if ((mask & (1 << i)) == 0) continue;
-        final letter = String.fromCharCode(65 + i);
-        final root = '$letter:\\';
-        // Allocate with calloc so we can safely free using calloc.free below.
-        final rootPtr = root.toNativeUtf16(allocator: calloc);
-        try {
-          if (GetDriveType(rootPtr) != DRIVE_REMOVABLE) {
-            continue;
-          }
-          final volNameBufNative = calloc<Uint16>(MAX_PATH);
-          final fsNameBufNative = calloc<Uint16>(MAX_PATH);
-          final pSerialNumber = calloc<Uint32>();
-          final pMaxComponentLen = calloc<Uint32>();
-          final pFileSystemFlags = calloc<Uint32>();
-          try {
-            final success = GetVolumeInformation(
-              rootPtr,
-              volNameBufNative.cast<Utf16>(),
-              MAX_PATH,
-              pSerialNumber,
-              pMaxComponentLen,
-              pFileSystemFlags,
-              fsNameBufNative.cast<Utf16>(),
-              MAX_PATH,
-            );
-            if (success != 0) {
-              final serialHex = pSerialNumber.value
-                  .toRadixString(16)
-                  .toUpperCase()
-                  .padLeft(8, '0');
-              final formatted =
-                  '${serialHex.substring(0, 4)}-${serialHex.substring(4)}';
-              devices.add(
-                ConnectedDeviceInfo(mountPath: root, serialNumber: formatted),
-              );
-            } else {
-              final error = GetLastError();
-              if (error == ERROR_NOT_READY) {
-                _logService.logInfo(
-                  'Drive $root is not ready (no media inserted). Skipping.',
-                );
-              } else if (error == ERROR_ACCESS_DENIED) {
-                _logService.logWarning(
-                  'Access denied while reading removable drive $root. The drive might be in use.',
-                );
-              } else {
-                _logService.logInfo(
-                  'Could not get volume information for removable drive $root. Win32 Error: $error',
-                );
-              }
-            }
-          } finally {
-            calloc.free(volNameBufNative);
-            calloc.free(fsNameBufNative);
-            calloc.free(pSerialNumber);
-            calloc.free(pMaxComponentLen);
-            calloc.free(pFileSystemFlags);
-          }
-        } catch (e, st) {
-          _logService.logError(
-            "Error processing drive $root. This might be a bug or an unexpected system state.",
-            e,
-            st,
-          );
-        } finally {
-          calloc.free(rootPtr);
+      final output = _decodeProcessOutput(result.stdout).trim();
+      if (output.isEmpty || output == '[]' || output == 'null') {
+        return <ConnectedDeviceInfo>[];
+      }
+      dynamic decoded;
+      try {
+        decoded = jsonDecode(output);
+      } on FormatException catch (e, st) {
+        _logService.logError(
+          'Failed to parse PowerShell drive enumeration output.',
+          e,
+          st,
+        );
+        return <ConnectedDeviceInfo>[];
+      }
+      final Iterable<dynamic> items = decoded is List ? decoded : [decoded];
+      final devices = <ConnectedDeviceInfo>[];
+      for (final item in items) {
+        if (item is! Map) {
+          continue;
         }
+        final deviceId = item['DeviceID'] as String?;
+        final volumeSerial = item['VolumeSerialNumber'] as String?;
+        if (deviceId == null || deviceId.isEmpty) {
+          continue;
+        }
+        if (volumeSerial == null || volumeSerial.isEmpty) {
+          _logService.logInfo(
+            'Skipping removable drive $deviceId because it has no volume serial number.',
+          );
+          continue;
+        }
+        final formattedSerial = _formatSerial(volumeSerial);
+        if (formattedSerial == null) {
+          _logService.logWarning(
+            'Skipping removable drive $deviceId due to unexpected serial format: $volumeSerial',
+          );
+          continue;
+        }
+        devices.add(
+          ConnectedDeviceInfo(
+            mountPath: _normalizeMountPath(deviceId),
+            serialNumber: formattedSerial,
+          ),
+        );
       }
       devices.sort((a, b) => a.mountPath.compareTo(b.mountPath));
       return devices;
     } catch (e, st) {
       _logService.logError('Error enumerating drives', e, st);
-      return [];
-    }
-    finally {
-      if (threadErrorModeChanged) {
-        SetThreadErrorMode(previousThreadErrorMode.value, nullptr);
-      } else if (previousProcessErrorMode != null) {
-        SetErrorMode(previousProcessErrorMode!);
-      }
-      calloc.free(previousThreadErrorMode);
+      return <ConnectedDeviceInfo>[];
+    } finally {
       completer.complete();
       _scanInProgress = null;
     }
+  }
+
+  String _normalizeMountPath(String deviceId) {
+    final normalized = deviceId.trim().replaceAll('/', '\\').toUpperCase();
+    if (normalized.isEmpty) {
+      return normalized;
+    }
+    return normalized.endsWith('\\') ? normalized : '$normalized\\';
+  }
+
+  String? _formatSerial(String serial) {
+    final sanitized = serial.replaceAll(RegExp(r'[^0-9A-Fa-f]'), '').toUpperCase();
+    if (sanitized.length != 8) {
+      return null;
+    }
+    return '${sanitized.substring(0, 4)}-${sanitized.substring(4)}';
+  }
+
+  String _decodeProcessOutput(dynamic value) {
+    if (value == null) {
+      return '';
+    }
+    if (value is String) {
+      return value;
+    }
+    if (value is List<int>) {
+      try {
+        return utf8.decode(value);
+      } catch (_) {
+        return String.fromCharCodes(value);
+      }
+    }
+    return value.toString();
   }
 
   bool _areEqual(List<ConnectedDeviceInfo> a, List<ConnectedDeviceInfo> b) {
@@ -204,9 +202,10 @@ class DeviceService {
       ], runInShell: true);
       await volumeIdFile.delete();
       if (result.exitCode != 0) {
-        _logService.logError('volumeid.exe failed: ${result.stderr}');
+        final errorOutput = _decodeProcessOutput(result.stderr);
+        _logService.logError('volumeid.exe failed: $errorOutput');
         throw Exception(
-          'Failed to execute volumeid.exe. Error: ${result.stderr}',
+          'Failed to execute volumeid.exe. Error: $errorOutput',
         );
       }
       await _refreshDevices();
