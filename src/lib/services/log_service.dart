@@ -10,18 +10,11 @@ class LogService {
   static const String _logFileName = 'app_log.txt'; // שם קובץ הלוג
   static const String _logDirectoryName =
       'logs'; // תיקיית הלוג בתוך תיקיית התמיכה של האפליקציה
-  static const String _applicationName =
-      'KolHaShiurim'; // שם היישום לשימוש בנתיב התיקייה
-
   // אתחול שירות הלוג
   Future<void> init() async {
     try {
       final appSupportDir = await getApplicationSupportDirectory();
-      // יצירת תיקייה ספציפית לאפליקציה בתוך AppData/Roaming (בווינדוס)
-      final appSpecificDir = Directory(
-        p.join(appSupportDir.path, _applicationName),
-      );
-      final logDir = Directory(p.join(appSpecificDir.path, _logDirectoryName));
+      final logDir = Directory(p.join(appSupportDir.path, _logDirectoryName));
 
       // וודא שהתיקייה קיימת, אם לא - צור אותה (כולל תיקיות אב)
       if (!await logDir.exists()) {
@@ -90,3 +83,4 @@ class LogService {
     await _writeLog(LogLevel.error, fullMessage);
   }
 }
+

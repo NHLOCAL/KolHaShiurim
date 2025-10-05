@@ -29,11 +29,10 @@ class LicenseManager {
   LicenseManager(this.publicKey);
   Future<File> get _licenseFile async {
     final dir = await getApplicationSupportDirectory();
-    final appDir = Directory(p.join(dir.path, 'KolHaShiurim'));
-    if (!await appDir.exists()) {
-      await appDir.create(recursive: true);
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
     }
-    return File(p.join(appDir.path, 'app.lic'));
+    return File(p.join(dir.path, 'app.lic'));
   }
 
   Future<String?> _getPowerShellInfo(
@@ -209,3 +208,4 @@ class LicenseManager {
     return verifyLicense(content, logService);
   }
 }
+
