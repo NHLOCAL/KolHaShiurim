@@ -13,6 +13,7 @@ class DeviceService {
   final _controller = StreamController<List<ConnectedDeviceInfo>>.broadcast();
   final LogService _logService;
   Timer? _pollingTimer;
+  Future<void>? _scanInProgress;
   static const _pollingInterval = Duration(seconds: 5);
   DeviceService(this._logService) {
     _logService.logInfo('DeviceService initialized.');
@@ -49,9 +50,41 @@ class DeviceService {
   }
 
   Future<List<ConnectedDeviceInfo>> _getDevices() async {
+    while (_scanInProgress != null) {
+      await _scanInProgress;
+    }
+    final completer = Completer<void>();
+    _scanInProgress = completer.future;
+    const suppressedErrors = SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX;
+    final previousThreadErrorMode = calloc<Uint32>();
+    int? previousProcessErrorMode;
+    var threadErrorModeChanged = false;
     try {
+      final setThreadResult =
+          SetThreadErrorMode(suppressedErrors, previousThreadErrorMode);
+      if (setThreadResult != 0) {
+        threadErrorModeChanged = true;
+      } else {
+        previousProcessErrorMode = SetErrorMode(suppressedErrors);
+        if (previousProcessErrorMode == 0) {
+          final error = GetLastError();
+          if (error != NO_ERROR) {
+            _logService.logWarning(
+              'Failed to configure critical-error suppression. Win32 Error: $error',
+            );
+          }
+        }
+      }
       final devices = <ConnectedDeviceInfo>[];
       final mask = GetLogicalDrives();
+      if (mask == 0) {
+        final error = GetLastError();
+        _logService.logError(
+          'GetLogicalDrives failed.',
+          'Win32 Error: $error',
+        );
+        return devices;
+      }
       for (var i = 0; i < 26; i++) {
         if ((mask & (1 << i)) == 0) continue;
         final letter = String.fromCharCode(65 + i);
@@ -89,9 +122,20 @@ class DeviceService {
                 ConnectedDeviceInfo(mountPath: root, serialNumber: formatted),
               );
             } else {
-              _logService.logInfo(
-                'Could not get volume information for removable drive $root. This is often normal for empty readers. Win32 Error: ${GetLastError()}',
-              );
+              final error = GetLastError();
+              if (error == ERROR_NOT_READY) {
+                _logService.logInfo(
+                  'Drive $root is not ready (no media inserted). Skipping.',
+                );
+              } else if (error == ERROR_ACCESS_DENIED) {
+                _logService.logWarning(
+                  'Access denied while reading removable drive $root. The drive might be in use.',
+                );
+              } else {
+                _logService.logInfo(
+                  'Could not get volume information for removable drive $root. Win32 Error: $error',
+                );
+              }
             }
           } finally {
             calloc.free(volNameBufNative);
@@ -110,10 +154,21 @@ class DeviceService {
           calloc.free(rootPtr);
         }
       }
+      devices.sort((a, b) => a.mountPath.compareTo(b.mountPath));
       return devices;
     } catch (e, st) {
       _logService.logError('Error enumerating drives', e, st);
       return [];
+    }
+    finally {
+      if (threadErrorModeChanged) {
+        SetThreadErrorMode(previousThreadErrorMode.value, nullptr);
+      } else if (previousProcessErrorMode != null) {
+        SetErrorMode(previousProcessErrorMode!);
+      }
+      calloc.free(previousThreadErrorMode);
+      completer.complete();
+      _scanInProgress = null;
     }
   }
 

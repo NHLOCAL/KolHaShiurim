@@ -19,7 +19,7 @@ class WindowActions {
   static void _forceShowOnTop() {
     if (!Platform.isWindows) return;
 
-    final ptrTitle = 'קול השיעורים'.toNativeUtf16();
+    final ptrTitle = 'קול השיעורים'.toNativeUtf16(allocator: calloc);
 
     final hwnd = win32.FindWindow(dart_ffi.nullptr.cast<Utf16>(), ptrTitle);
     calloc.free(ptrTitle);
