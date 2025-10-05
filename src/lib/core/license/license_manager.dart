@@ -29,7 +29,7 @@ class LicenseManager {
   LicenseManager(this.publicKey);
   Future<File> get _licenseFile async {
     final dir = await getApplicationSupportDirectory();
-    final appDir = Directory(p.join(dir.path, 'TorahShiurimTransfer'));
+    final appDir = Directory(p.join(dir.path, 'KolHaShiurim'));
     if (!await appDir.exists()) {
       await appDir.create(recursive: true);
     }
