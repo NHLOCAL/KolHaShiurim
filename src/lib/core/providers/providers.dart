@@ -52,7 +52,7 @@ class AuthStateNotifier extends StateNotifier<AppUserState> {
     _listenForDevices();
     _deviceService.startPolling();
     _logService.logInfo(
-      'Application started, device polling initiated for background detection.',
+      'Application started, device monitoring initiated for background detection.',
     );
   }
   void _listenForDevices() {

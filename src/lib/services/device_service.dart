@@ -10,8 +10,15 @@ import 'package:kol_hashiurim/services/log_service.dart';
 class DeviceService {
   final _controller = StreamController<List<ConnectedDeviceInfo>>.broadcast();
   final LogService _logService;
-  Timer? _pollingTimer;
+  Timer? _fallbackTimer;
+  Timer? _eventDebounceTimer;
   Future<void>? _scanInProgress;
+  Process? _eventWatcherProcess;
+  StreamSubscription<String>? _eventWatcherStdoutSub;
+  StreamSubscription<String>? _eventWatcherStderrSub;
+  bool _eventWatcherStarting = false;
+  bool _eventWatcherStopRequested = false;
+  bool _pendingEventWatcherRestart = false;
   static const _pollingInterval = Duration(seconds: 5);
   static const _powershellDeviceQuery = r'''
 $ErrorActionPreference = 'Stop'
@@ -20,6 +27,30 @@ $ErrorActionPreference = 'Stop'
     Where-Object { $_.DriveType -eq 2 -and $_.VolumeSerialNumber } |
     Select-Object -Property DeviceID, VolumeSerialNumber
 ) | ConvertTo-Json -Compress
+''';
+  static const _powershellVolumeWatcherScript = r'''
+$ErrorActionPreference = 'Stop'
+$sourceId = 'KolHashiurimVolumeWatcher'
+if (Get-EventSubscriber -SourceIdentifier $sourceId -ErrorAction SilentlyContinue) {
+  Unregister-Event -SourceIdentifier $sourceId | Out-Null
+}
+Register-WmiEvent -Class Win32_VolumeChangeEvent -SourceIdentifier $sourceId | Out-Null
+try {
+  while ($true) {
+    $evt = Wait-Event -SourceIdentifier $sourceId
+    if ($null -ne $evt) {
+      $newEvent = $evt.SourceEventArgs.NewEvent
+      $drive = $newEvent.DriveName
+      $type = $newEvent.EventType
+      if ($drive) {
+        Write-Output (@{ EventType = $type; Drive = $drive } | ConvertTo-Json -Compress)
+      }
+      Remove-Event -EventIdentifier $evt.EventIdentifier | Out-Null
+    }
+  }
+} finally {
+  Unregister-Event -SourceIdentifier $sourceId -ErrorAction SilentlyContinue | Out-Null
+}
 ''';
   DeviceService(this._logService) {
     _logService.logInfo('DeviceService initialized.');
@@ -31,20 +62,56 @@ $ErrorActionPreference = 'Stop'
   }
 
   void startPolling() {
-    if (_pollingTimer?.isActive ?? false) {
-      _logService.logInfo('Polling is already active.');
+    if (!Platform.isWindows) {
+      if (_fallbackTimer?.isActive ?? false) {
+        _logService.logInfo('Fallback device polling already active.');
+        return;
+      }
+      unawaited(_refreshDevices());
+      _startFallbackTimer(reason: 'unsupported platform');
       return;
     }
-    _logService.logInfo('Starting device polling.');
-    _refreshDevices();
-    _pollingTimer = Timer.periodic(_pollingInterval, (_) => _refreshDevices());
+    if (_eventWatcherProcess != null) {
+      if (_eventWatcherStopRequested) {
+        _pendingEventWatcherRestart = true;
+        _logService.logInfo(
+          'Device monitoring restart requested; waiting for current watcher to stop.',
+        );
+      } else {
+        _logService.logInfo('Device monitoring already active.');
+      }
+      return;
+    }
+    if (_eventWatcherStarting) {
+      _logService.logInfo('Device monitoring start already in progress.');
+      return;
+    }
+    _pendingEventWatcherRestart = false;
+    _logService.logInfo('Starting device monitoring using Win32 volume events.');
+    _stopFallbackTimer();
+    unawaited(_refreshDevices());
+    unawaited(_startEventWatcher());
   }
 
   void stopPolling() {
-    if (_pollingTimer?.isActive ?? false) {
-      _pollingTimer?.cancel();
-      _pollingTimer = null;
-      _logService.logInfo('Device polling stopped.');
+    final hadFallback = _fallbackTimer != null;
+    _stopFallbackTimer();
+    _eventDebounceTimer?.cancel();
+    _eventDebounceTimer = null;
+    _pendingEventWatcherRestart = false;
+    if (_eventWatcherProcess != null) {
+      _eventWatcherStopRequested = true;
+      _logService.logInfo('Stopping volume event watcher.');
+      _eventWatcherProcess!.kill();
+    } else if (_eventWatcherStarting) {
+      _eventWatcherStopRequested = true;
+      _logService.logInfo(
+        'Volume event watcher start in progress; stop will take effect once ready.',
+      );
+    } else if (hadFallback) {
+      _logService.logInfo('Fallback device polling stopped.');
+    } else {
+      _logService.logInfo('Device monitoring is not active.');
     }
   }
 
@@ -137,6 +204,183 @@ $ErrorActionPreference = 'Stop'
     }
   }
 
+  Future<void> _startEventWatcher() async {
+    if (!Platform.isWindows || _eventWatcherProcess != null || _eventWatcherStarting) {
+      return;
+    }
+    _eventWatcherStarting = true;
+    try {
+      final process = await Process.start(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-NonInteractive',
+          '-Command',
+          _powershellVolumeWatcherScript,
+        ],
+        runInShell: true,
+      );
+      _eventWatcherProcess = process;
+      _eventWatcherStopRequested = false;
+      _stopFallbackTimer();
+      _logService.logInfo('Volume event watcher started (PID ${process.pid}).');
+
+      _eventWatcherStdoutSub = process.stdout
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .listen(
+        _handleVolumeWatcherLine,
+        onError: (Object error, StackTrace stackTrace) {
+          _logService.logError('Volume event watcher stdout error.', error, stackTrace);
+        },
+      );
+
+      _eventWatcherStderrSub = process.stderr
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .listen(
+        (String line) {
+          final trimmed = line.trim();
+          if (trimmed.isNotEmpty) {
+            _logService.logWarning('Volume event watcher stderr: $trimmed');
+          }
+        },
+        onError: (Object error, StackTrace stackTrace) {
+          _logService.logError('Volume event watcher stderr stream error.', error, stackTrace);
+        },
+      );
+
+      unawaited(process.exitCode.then(_handleWatcherExit));
+    } on ProcessException catch (e, st) {
+      _logService.logError('Failed to start volume event watcher process.', e, st);
+      _startFallbackTimer(reason: 'failed to start volume event watcher');
+    } catch (e, st) {
+      _logService.logError('Unexpected error starting volume event watcher.', e, st);
+      _startFallbackTimer(reason: 'volume event watcher error');
+    } finally {
+      _eventWatcherStarting = false;
+    }
+  }
+
+  void _handleVolumeWatcherLine(String line) {
+    final trimmed = line.trim();
+    if (trimmed.isEmpty) {
+      return;
+    }
+    dynamic decoded;
+    try {
+      decoded = jsonDecode(trimmed);
+    } catch (e, st) {
+      _logService.logWarning(
+        'Ignoring malformed volume watcher output: $trimmed',
+        e,
+        st,
+      );
+      return;
+    }
+    if (decoded is! Map) {
+      return;
+    }
+    final drive = decoded['Drive'];
+    if (drive is! String || drive.isEmpty) {
+      return;
+    }
+    final normalizedDrive = _normalizeMountPath(drive);
+    final eventTypeValue = decoded['EventType'];
+    final int? eventType = eventTypeValue is int
+        ? eventTypeValue
+        : int.tryParse(eventTypeValue?.toString() ?? '');
+    if (eventType != null && eventType != 2 && eventType != 3) {
+      _logService.logInfo(
+        'Ignoring volume event type ${_describeVolumeEventType(eventType)} for $normalizedDrive.',
+      );
+      return;
+    }
+    final description = eventType != null
+        ? _describeVolumeEventType(eventType)
+        : 'unknown';
+    _logService.logInfo(
+      'Volume event ($description) detected for $normalizedDrive. Scheduling device refresh.',
+    );
+    _scheduleRefresh();
+  }
+
+  void _scheduleRefresh() {
+    _eventDebounceTimer?.cancel();
+    _eventDebounceTimer = Timer(const Duration(milliseconds: 500), () {
+      unawaited(_refreshDevices());
+    });
+  }
+
+  void _startFallbackTimer({String? reason}) {
+    if (_fallbackTimer?.isActive ?? false) {
+      return;
+    }
+    final suffix = reason == null ? '' : ' ($reason)';
+    _logService.logWarning(
+      'Using fallback device polling every ${_pollingInterval.inSeconds} seconds$suffix.',
+    );
+    _fallbackTimer = Timer.periodic(_pollingInterval, (_) {
+      unawaited(_refreshDevices());
+    });
+    unawaited(_refreshDevices());
+  }
+
+  void _stopFallbackTimer() {
+    _fallbackTimer?.cancel();
+    _fallbackTimer = null;
+  }
+
+  void _handleWatcherExit(int exitCode) {
+    unawaited(_eventWatcherStdoutSub?.cancel());
+    unawaited(_eventWatcherStderrSub?.cancel());
+    _eventWatcherStdoutSub = null;
+    _eventWatcherStderrSub = null;
+    _eventWatcherProcess = null;
+
+    final expectedStop = _eventWatcherStopRequested;
+    final restartRequested = _pendingEventWatcherRestart;
+    _eventWatcherStopRequested = false;
+    _pendingEventWatcherRestart = false;
+
+    if (restartRequested && Platform.isWindows) {
+      _logService.logInfo(
+        'Restarting volume event watcher after stop (previous exit code $exitCode).',
+      );
+      unawaited(_startEventWatcher());
+      return;
+    }
+
+    if (expectedStop) {
+      _logService.logInfo('Volume event watcher stopped (exit code $exitCode).');
+      return;
+    }
+
+    if (Platform.isWindows) {
+      _logService.logWarning(
+        'Volume event watcher exited unexpectedly (code $exitCode). Attempting restart.',
+      );
+      unawaited(_startEventWatcher());
+    } else {
+      _startFallbackTimer(reason: 'event watcher unavailable');
+    }
+  }
+
+  String _describeVolumeEventType(int type) {
+    switch (type) {
+      case 1:
+        return 'configuration change';
+      case 2:
+        return 'arrival';
+      case 3:
+        return 'removal';
+      case 4:
+        return 'dock';
+      default:
+        return 'type $type';
+    }
+  }
+
   String _normalizeMountPath(String deviceId) {
     final normalized = deviceId.trim().replaceAll('/', '\\').toUpperCase();
     if (normalized.isEmpty) {
@@ -219,6 +463,12 @@ $ErrorActionPreference = 'Stop'
 
   void dispose() {
     stopPolling();
+    unawaited(_eventWatcherStdoutSub?.cancel());
+    unawaited(_eventWatcherStderrSub?.cancel());
+    _eventWatcherStdoutSub = null;
+    _eventWatcherStderrSub = null;
+    _eventDebounceTimer?.cancel();
+    _eventDebounceTimer = null;
     if (!_controller.isClosed) {
       _controller.close();
     }
