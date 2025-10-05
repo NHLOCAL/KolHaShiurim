@@ -11,7 +11,7 @@ class LogService {
   static const String _logDirectoryName =
       'logs'; // תיקיית הלוג בתוך תיקיית התמיכה של האפליקציה
   static const String _applicationName =
-      'TorahShiurimTransfer'; // שם היישום לשימוש בנתיב התיקייה
+      'KolHaShiurim'; // שם היישום לשימוש בנתיב התיקייה
 
   // אתחול שירות הלוג
   Future<void> init() async {
