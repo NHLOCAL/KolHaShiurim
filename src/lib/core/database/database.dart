@@ -23,7 +23,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration {
@@ -46,6 +46,19 @@ class AppDatabase extends _$AppDatabase {
           await m.addColumn(users, users.additionalInfo);
         }
         if (from < 5) {}
+        if (from < 6) {
+          await m.alterTable(
+            TableMigration(
+              devices,
+              columnTransformer: {
+                devices.id: devices.id,
+                devices.userId: devices.userId,
+                devices.serialNumber: devices.serialNumber,
+                devices.sourcePath: devices.sourcePath,
+              },
+            ),
+          );
+        }
       },
     );
   }

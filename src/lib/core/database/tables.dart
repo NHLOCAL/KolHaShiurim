@@ -12,8 +12,6 @@ class Devices extends Table {
   IntColumn get userId => integer().references(Users, #id)();
 
   TextColumn get serialNumber => text().unique()();
-
-  TextColumn get mountPath => text()();
   TextColumn get sourcePath => text()();
 }
 
