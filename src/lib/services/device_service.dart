@@ -272,9 +272,7 @@ try {
       decoded = jsonDecode(trimmed);
     } catch (e, st) {
       _logService.logWarning(
-        'Ignoring malformed volume watcher output: $trimmed',
-        e,
-        st,
+        'Ignoring malformed volume watcher output: $trimmed. Error: $e\nStackTrace: $st',
       );
       return;
     }
