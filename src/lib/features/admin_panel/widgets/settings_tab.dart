@@ -179,7 +179,6 @@ class SettingsTab extends ConsumerWidget {
                   DevicesCompanion.insert(
                     userId: newUserId,
                     serialNumber: deviceMap['serialNumber'],
-                    mountPath: deviceMap['mountPath'] ?? '',
                     sourcePath: deviceMap['sourcePath'],
                   ),
                 );

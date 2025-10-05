@@ -171,7 +171,7 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
     );
     _selectedUserId = widget.device?.userId;
     _isEditingSerial = widget.device == null;
-    _mountPath = widget.device?.mountPath;
+    _mountPath = null;
     if (widget.device != null) {
       _findCurrentMountPath();
     }
@@ -353,22 +353,9 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
   }
   Future<void> _saveDevice() async {
     if (_formKey.currentState!.validate()) {
-      if (_mountPath == null) {
-        _logService.logWarning(
-          'Attempted to save device without a mount path. Please locate the device first.',
-        );
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('יש לאתר את ההתקן לפני השמירה.'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-        return;
-      }
       final serialNumber = _serialController.text;
       final companion = DevicesCompanion(
         serialNumber: drift.Value(serialNumber),
-        mountPath: drift.Value(_mountPath!),
         sourcePath: drift.Value(_sourcePathController.text),
         userId: drift.Value(_selectedUserId!),
       );
