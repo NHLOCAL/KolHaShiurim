@@ -168,22 +168,59 @@ class SettingsTab extends ConsumerWidget {
           oldNewUserIdMap[oldId] = newId;
         }
         logService.logInfo("Restored ${oldNewUserIdMap.length} users.");
+        String coerceToString(dynamic value) {
+          if (value == null) {
+            return '';
+          }
+          if (value is String) {
+            return value;
+          }
+          return value.toString();
+        }
+
         final devicesList = backupData['devices'] as List;
         for (final deviceMap in devicesList) {
-          final oldUserId = deviceMap['userId'] as int;
-          final newUserId = oldNewUserIdMap[oldUserId];
-          if (newUserId != null) {
-            await db
-                .into(db.devices)
-                .insert(
-                  DevicesCompanion.insert(
-                    userId: newUserId,
-                    serialNumber: deviceMap['serialNumber'],
-                    mountPath: deviceMap['mountPath'] ?? '',
-                    sourcePath: deviceMap['sourcePath'],
-                  ),
-                );
+          final rawUserId = deviceMap['userId'];
+          if (rawUserId is! int) {
+            await logService.logWarning(
+              'Skipping device entry with invalid or missing userId: $rawUserId',
+            );
+            continue;
           }
+
+          final newUserId = oldNewUserIdMap[rawUserId];
+          if (newUserId == null) {
+            await logService.logWarning(
+              'Skipping device with unmapped userId: $rawUserId',
+            );
+            continue;
+          }
+
+          final rawSerial = deviceMap['serialNumber'];
+          final serialNumber = coerceToString(rawSerial);
+          if (rawSerial != null && rawSerial is! String) {
+            await logService.logWarning(
+              'Coerced non-string serial number "$rawSerial" to "$serialNumber" during restore.',
+            );
+          }
+
+          final rawSourcePath = deviceMap['sourcePath'];
+          final sourcePath = coerceToString(rawSourcePath);
+          if (rawSourcePath != null && rawSourcePath is! String) {
+            await logService.logWarning(
+              'Coerced non-string source path "$rawSourcePath" to "$sourcePath" during restore.',
+            );
+          }
+
+          await db
+              .into(db.devices)
+              .insert(
+                DevicesCompanion.insert(
+                  userId: newUserId,
+                  serialNumber: serialNumber,
+                  sourcePath: sourcePath,
+                ),
+              );
         }
         logService.logInfo("Restored devices.");
         final permissionsList = backupData['userRabbiPermissions'] as List;

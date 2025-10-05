@@ -171,7 +171,7 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
     );
     _selectedUserId = widget.device?.userId;
     _isEditingSerial = widget.device == null;
-    _mountPath = widget.device?.mountPath;
+    _mountPath = null;
     if (widget.device != null) {
       _findCurrentMountPath();
     }
@@ -352,65 +352,69 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
     }
   }
   Future<void> _saveDevice() async {
-    if (_formKey.currentState!.validate()) {
-      if (_mountPath == null) {
-        _logService.logWarning(
-          'Attempted to save device without a mount path. Please locate the device first.',
-        );
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('יש לאתר את ההתקן לפני השמירה.'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-        return;
-      }
-      final serialNumber = _serialController.text;
-      final companion = DevicesCompanion(
-        serialNumber: drift.Value(serialNumber),
-        mountPath: drift.Value(_mountPath!),
-        sourcePath: drift.Value(_sourcePathController.text),
-        userId: drift.Value(_selectedUserId!),
-      );
-      try {
-        if (widget.device == null) {
-          final newDeviceId = await ref
-              .read(databaseProvider)
-              .insertDevice(companion);
-          _logService.logUserActivity(
-            'Admin added new device: $serialNumber (ID: $newDeviceId), assigned to user ID: $_selectedUserId, SourcePath: ${_sourcePathController.text}',
-          );
-        } else {
-          await ref
-              .read(databaseProvider)
-              .updateDevice(
-                companion.copyWith(id: drift.Value(widget.device!.id)),
-              );
-          _logService.logUserActivity(
-            'Admin updated device: ${widget.device!.serialNumber} (ID: ${widget.device!.id}) to $serialNumber, assigned to user ID: $_selectedUserId, SourcePath: ${_sourcePathController.text}',
-          );
-        }
-        if (mounted) {
-          Navigator.of(context).pop();
-        }
-      } catch (e, st) {
-        _logService.logError('Failed to save device: $serialNumber', e, st);
-        if (mounted) {
-          String errorMessage = 'שגיאה בשמירת ההתקן. פרטים נוספים ביומן.';
-          if (e.toString().contains(
-            'UNIQUE constraint failed: devices.serial_number',
-          )) {
-            errorMessage = 'המספר הסידורי שהוזן כבר קיים במערכת.';
-          }
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(errorMessage), backgroundColor: Colors.red),
-          );
-        }
-      }
-    } else {
+    if (!_formKey.currentState!.validate()) {
       _logService.logWarning(
         'Attempted to save device with invalid form data.',
       );
+      return;
+    }
+
+    final selectedUserId = _selectedUserId;
+    if (selectedUserId == null) {
+      _logService.logWarning(
+        'Attempted to save device without selecting a user.',
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('יש לבחור משתמש לשיוך לפני שמירת ההתקן.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    final serialNumber = _serialController.text;
+    final companion = DevicesCompanion(
+      serialNumber: drift.Value(serialNumber),
+      sourcePath: drift.Value(_sourcePathController.text),
+      userId: drift.Value(selectedUserId),
+    );
+    try {
+      if (widget.device == null) {
+        final newDeviceId = await ref
+            .read(databaseProvider)
+            .insertDevice(companion);
+        _logService.logUserActivity(
+          'Admin added new device: $serialNumber (ID: $newDeviceId), assigned to user ID: $selectedUserId, SourcePath: ${_sourcePathController.text}',
+        );
+      } else {
+        await ref
+            .read(databaseProvider)
+            .updateDevice(
+              companion.copyWith(id: drift.Value(widget.device!.id)),
+            );
+        _logService.logUserActivity(
+          'Admin updated device: ${widget.device!.serialNumber} (ID: ${widget.device!.id}) to $serialNumber, assigned to user ID: $selectedUserId, SourcePath: ${_sourcePathController.text}',
+        );
+      }
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+    } catch (e, st) {
+      _logService.logError('Failed to save device: $serialNumber', e, st);
+      if (mounted) {
+        String errorMessage = 'שגיאה בשמירת ההתקן. פרטים נוספים ביומן.';
+        if (e.toString().contains(
+          'UNIQUE constraint failed: devices.serial_number',
+        )) {
+          errorMessage = 'המספר הסידורי שהוזן כבר קיים במערכת.';
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(errorMessage), backgroundColor: Colors.red),
+        );
+      }
     }
   }
   @override
