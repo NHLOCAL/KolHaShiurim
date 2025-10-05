@@ -56,7 +56,8 @@ class DeviceService {
         if ((mask & (1 << i)) == 0) continue;
         final letter = String.fromCharCode(65 + i);
         final root = '$letter:\\';
-        final rootPtr = root.toNativeUtf16();
+        // Allocate with calloc so we can safely free using calloc.free below.
+        final rootPtr = root.toNativeUtf16(allocator: calloc);
         try {
           if (GetDriveType(rootPtr) != DRIVE_REMOVABLE) {
             continue;
