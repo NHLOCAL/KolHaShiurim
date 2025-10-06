@@ -60,8 +60,10 @@ class DeviceService {
     int? previousProcessErrorMode;
     var threadErrorModeChanged = false;
     try {
-      final setThreadResult =
-          SetThreadErrorMode(suppressedErrors, previousThreadErrorMode);
+      final setThreadResult = SetThreadErrorMode(
+        suppressedErrors,
+        previousThreadErrorMode,
+      );
       if (setThreadResult != 0) {
         threadErrorModeChanged = true;
       } else {
@@ -79,10 +81,7 @@ class DeviceService {
       final mask = GetLogicalDrives();
       if (mask == 0) {
         final error = GetLastError();
-        _logService.logError(
-          'GetLogicalDrives failed.',
-          'Win32 Error: $error',
-        );
+        _logService.logError('GetLogicalDrives failed.', 'Win32 Error: $error');
         return devices;
       }
       for (var i = 0; i < 26; i++) {
@@ -159,12 +158,11 @@ class DeviceService {
     } catch (e, st) {
       _logService.logError('Error enumerating drives', e, st);
       return [];
-    }
-    finally {
+    } finally {
       if (threadErrorModeChanged) {
         SetThreadErrorMode(previousThreadErrorMode.value, nullptr);
       } else if (previousProcessErrorMode != null) {
-        SetErrorMode(previousProcessErrorMode!);
+        SetErrorMode(previousProcessErrorMode);
       }
       calloc.free(previousThreadErrorMode);
       completer.complete();
