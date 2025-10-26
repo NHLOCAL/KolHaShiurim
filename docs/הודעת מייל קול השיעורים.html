@@ -11,14 +11,23 @@
         table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
         img { -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }
         body { height: 100% !important; margin: 0 !important; padding: 0 !important; width: 100% !important; background-color: #f4f4f4; }
+        a[x-apple-data-detectors] {
+            color: inherit !important;
+            text-decoration: none !important;
+            font-size: inherit !important;
+            font-family: inherit !important;
+            font-weight: inherit !important;
+            line-height: inherit !important;
+        }
 
         /* Responsive Styles */
         @media screen and (max-width: 600px) {
             .content-table {
                 width: 100% !important;
+                max-width: 100% !important;
             }
             .content-cell {
-                padding: 20px 15px !important;
+                padding: 25px 15px !important;
             }
             h2 {
                 font-size: 17px !important;
@@ -27,14 +36,14 @@
     </style>
 </head>
 <body style="margin: 0 !important; padding: 0 !important; background-color: #f4f4f4;" dir="rtl">
-    <table border="0" cellpadding="0" cellspacing="0" width="100%">
+    <!--[if (gte mso 9)|(IE)]>
+    <table align="center" border="0" cellspacing="0" cellpadding="0" width="680">
+    <tr>
+    <td align="center" valign="top" width="680">
+    <![endif]-->
+    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f4f4f4;">
         <tr>
-            <td align="center" style="padding: 20px 0;">
-                <!--[if (gte mso 9)|(IE)]>
-                <table align="center" border="0" cellspacing="0" cellpadding="0" width="680">
-                <tr>
-                <td align="center" valign="top" width="680">
-                <![endif]-->
+            <td align="center" valign="top" style="padding: 20px 0;">
                 <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 680px; background-color: #ffffff;" class="content-table">
                     <tr>
                         <td align="right" valign="top" style="padding: 40px 30px;" class="content-cell">
@@ -70,7 +79,7 @@
                             <p style="font-family: Tahoma, Arial, sans-serif; font-size: 15px; line-height: 1.7; color: #333333; margin: 0 0 20px;">
                                 לכן, אני לא מבקש ממך להאמין לי. אני מציע לך להוכיח את זה לעצמך:
                                 <br>
-                                <strong>קח את התוכנה לשבוע ניסיון מלא. <span style="background-color: #FAFF00;">בלי עלות. בלי התחייבות. בלי טריקים.</span></strong>
+                                <strong>קח את התוכנה לשבוע ניסיון מלא. בלי עלות. בלי התחייבות. בלי טריקים.</strong>
                             </p>
                             <p style="font-family: Tahoma, Arial, sans-serif; font-size: 15px; line-height: 1.7; color: #333333; margin: 0 0 20px;">
                                 תגדיר משתמש אחד. תראה איך תהליך של חצי שעה הופך לדקה וחצי. זו ההדגמה החיה הטובה ביותר, גם אם תצטרך להציג את הפתרון הלאה.
@@ -100,13 +109,13 @@
                         </td>
                     </tr>
                 </table>
-                <!--[if (gte mso 9)|(IE)]>
-                </td>
-                </tr>
-                </table>
-                <![endif]-->
             </td>
         </tr>
     </table>
+    <!--[if (gte mso 9)|(IE)]>
+    </td>
+    </tr>
+    </table>
+    <![endif]-->
 </body>
 </html>
