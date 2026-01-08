@@ -8,14 +8,18 @@ import 'package:kol_hashiurim/models/device_info.dart';
 import 'package:kol_hashiurim/services/log_service.dart';
 import 'package:kol_hashiurim/services/device_scanner_isolate.dart';
 
+typedef DeviceScanner = Future<List<ConnectedDeviceInfo>> Function();
+
 class DeviceService {
   final _controller = StreamController<List<ConnectedDeviceInfo>>.broadcast();
   final LogService _logService;
   Timer? _pollingTimer;
-  bool _isScanning = false;
+  Future<List<ConnectedDeviceInfo>>? _scanFuture;
+  final DeviceScanner _scanDevices;
   static const _pollingInterval = Duration(seconds: 4);
 
-  DeviceService(this._logService) {
+  DeviceService(this._logService, {DeviceScanner? scanDevices})
+      : _scanDevices = scanDevices ?? _scanDevicesViaIsolate {
     _logService.logInfo('DeviceService initialized (Isolate Mode).');
   }
 
@@ -23,7 +27,8 @@ class DeviceService {
       _controller.stream.distinct((a, b) => _areEqual(a, b));
 
   Future<List<ConnectedDeviceInfo>> getConnectedDevices() async {
-    return _performScan();
+    _scanFuture ??= _performScan();
+    return _scanFuture!;
   }
 
   void startPolling() {
@@ -44,10 +49,8 @@ class DeviceService {
   }
 
   Future<void> _performScanAndEmit() async {
-    if (_isScanning) return;
-    
     try {
-      final devices = await _performScan();
+      final devices = await getConnectedDevices();
       if (!_controller.isClosed) {
         _controller.add(devices);
       }
@@ -57,25 +60,29 @@ class DeviceService {
   }
 
   Future<List<ConnectedDeviceInfo>> _performScan() async {
-    if (_isScanning) return [];
-    _isScanning = true;
-
     try {
-      final isolateResults = await compute(scanDevicesSync, null);
-      
-      final devices = isolateResults.map((d) => ConnectedDeviceInfo(
-        mountPath: d.path,
-        serialNumber: d.serial,
-      )).toList();
-
-      devices.sort((a, b) => a.mountPath.compareTo(b.mountPath));
-      return devices;
+      return await _scanDevices();
     } catch (e, st) {
       _logService.logError('Fatal error in isolate scan', e, st);
       return [];
     } finally {
-      _isScanning = false;
+      _scanFuture = null;
     }
+  }
+
+  static Future<List<ConnectedDeviceInfo>> _scanDevicesViaIsolate() async {
+    final isolateResults = await compute(scanDevicesSync, null);
+    final devices = isolateResults
+        .map(
+          (d) => ConnectedDeviceInfo(
+            mountPath: d.path,
+            serialNumber: d.serial,
+          ),
+        )
+        .toList();
+
+    devices.sort((a, b) => a.mountPath.compareTo(b.mountPath));
+    return devices;
   }
 
   bool _areEqual(List<ConnectedDeviceInfo> a, List<ConnectedDeviceInfo> b) {

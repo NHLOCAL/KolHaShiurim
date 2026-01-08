@@ -9,22 +9,18 @@ import 'package:kol_hashiurim/core/database/database.dart';
 import 'package:kol_hashiurim/core/providers/providers.dart';
 import 'package:kol_hashiurim/features/user_panel/providers/user_panel_providers.dart';
 import 'package:kol_hashiurim/services/log_service.dart';
-
 class TransferDetailsPanel extends ConsumerStatefulWidget {
   final File? selectedFile;
   final VoidCallback onCopyComplete;
-
   const TransferDetailsPanel({
     super.key,
     required this.selectedFile,
     required this.onCopyComplete,
   });
-
   @override
   ConsumerState<TransferDetailsPanel> createState() =>
       _TransferDetailsPanelState();
 }
-
 class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
   UserPermissionInfo? _selectedPermission;
   String? _selectedSpecificPath;
@@ -34,14 +30,13 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
   AppSetting? _appSettings;
   late final LogService _logService;
   late final AudioPlayer _audioPlayer;
-
+  double? _pendingSeekMillis;
   final List<List<String>> _hebrewKeys = const [
     ['-', '0', '9', '8', '7', '6', '5', '4', '3', '2', '1'],
     ['(', ')', 'פ', 'ם', 'ן', 'ו', 'ט', 'א', 'ר', 'ק', '\''],
     [',', 'ף', 'ך', 'ל', 'ח', 'י', 'ע', 'כ', 'ג', 'ד', 'ש'],
     ['.', 'ץ', 'ת', 'צ', 'מ', 'נ', 'ה', 'ב', 'ס', 'ז'],
   ];
-
   @override
   void initState() {
     super.initState();
@@ -50,27 +45,39 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
     _loadSettings();
     _logService.logInfo('Transfer Details Panel initialized.');
   }
-
   @override
   void didUpdateWidget(covariant TransferDetailsPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.selectedFile != oldWidget.selectedFile) {
-      _audioPlayer.stop();
-      if (widget.selectedFile != null) {
-        _resetForm();
-        try {
-          _audioPlayer.setFilePath(widget.selectedFile!.path);
-        } catch (e) {
-          _logService.logError(
-            "Error setting audio source",
-            e,
-            StackTrace.current,
-          );
-        }
-      }
+      _handleFileChange();
     }
   }
-
+  /// Handles the safe transition between audio files to prevent threading errors
+  /// on Windows (avoiding race conditions between stop and setFilePath).
+  Future<void> _handleFileChange() async {
+    try {
+      // 1. Stop playback properly and wait for it to finish
+      if (_audioPlayer.playing || _audioPlayer.processingState != ProcessingState.idle) {
+        await _audioPlayer.stop();
+      }
+      // 2. Clear previous state if needed
+      if (widget.selectedFile == null) {
+        return;
+      }
+      // 3. Reset UI form
+      _resetForm();
+      // 4. Load new file only if widget is still mounted
+      if (mounted && widget.selectedFile != null) {
+         await _audioPlayer.setFilePath(widget.selectedFile!.path);
+      }
+    } catch (e) {
+      _logService.logError(
+        "Error switching audio source",
+        e,
+        StackTrace.current,
+      );
+    }
+  }
   Future<void> _loadSettings() async {
     _logService.logInfo('Loading app settings for user panel.');
     try {
@@ -85,14 +92,12 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       _logService.logError('Failed to load app settings for user panel', e, st);
     }
   }
-
   @override
   void dispose() {
     _topicController.dispose();
     _audioPlayer.dispose();
     super.dispose();
   }
-
   void _resetForm() {
     _logService.logInfo('Resetting transfer form.');
     setState(() {
@@ -100,9 +105,9 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       _selectedSpecificPath = null;
       _topicController.clear();
       _selectedDate = JewishDate();
+      _pendingSeekMillis = null;
     });
   }
-
   String _getNewFileName() {
     if (_selectedPermission == null || widget.selectedFile == null) {
       return 'שם קובץ...';
@@ -121,7 +126,6 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
     _logService.logInfo('Generated new file name preview: $fileName');
     return fileName;
   }
-
   Future<String> _determineFinalFileName() async {
     if (_selectedPermission == null || widget.selectedFile == null) {
       _logService.logError(
@@ -131,7 +135,6 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       );
       throw Exception("Cannot determine filename, selection is incomplete.");
     }
-
     final formatter = HebrewDateFormatter()
       ..hebrewFormat = true
       ..useGershGershayim = false;
@@ -142,20 +145,17 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
         ? '.mp3'
         : p.extension(widget.selectedFile!.path);
     final rabbiName = _selectedPermission!.rabbi.name;
-
     final baseDirectory = _selectedPermission!.rabbi.targetPath;
     final destinationDirectory =
         (_selectedSpecificPath != null && _selectedSpecificPath!.isNotEmpty)
         ? p.join(baseDirectory, _selectedSpecificPath!)
         : baseDirectory;
-
     int nextNumber = 1;
     try {
       final dir = Directory(destinationDirectory);
       if (await dir.exists()) {
         int maxNumber = 0;
         final regex = RegExp(r'^(\d+)\s*-');
-
         await for (final entity in dir.list()) {
           if (entity is File) {
             final filename = p.basename(entity.path);
@@ -178,26 +178,21 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       );
       nextNumber = 1;
     }
-
     _logService.logInfo(
       "Determined next file number in folder is $nextNumber.",
     );
-
     final formattedNumber = nextNumber.toString().padLeft(2, '0');
     final finalFileName =
         '$formattedNumber - $dateStr - $rabbiName${sanitizedTopic.isNotEmpty ? ' - $sanitizedTopic' : ''}$extension';
-
     _logService.logInfo('Determined final file name: $finalFileName');
     return finalFileName;
   }
-
   Future<void> _showPostCopyOptionsDialog(
     File sourceFile,
     String newFileName,
   ) async {
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     final theme = Theme.of(context);
-
     await showDialog(
       context: context,
       barrierDismissible: false,
@@ -270,11 +265,9 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
         );
       },
     );
-
     ref.read(lastCopiedFileNameProvider.notifier).state = null;
     widget.onCopyComplete();
   }
-
   Future<void> _copyFile() async {
     await _audioPlayer.stop();
     if (widget.selectedFile == null ||
@@ -285,7 +278,6 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       );
       return;
     }
-
     if (_selectedPermission!.specificPaths.length > 1 &&
         _selectedSpecificPath == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -296,30 +288,23 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       );
       return;
     }
-
     setState(() => _isCopying = true);
     ref.read(lastCopiedFileNameProvider.notifier).state = null;
-
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     final authState = ref.read(authStateProvider);
     final sourceFile = widget.selectedFile!;
-
     _logService.logUserActivity(
       'User initiating file transfer for: ${sourceFile.path}',
     );
-
     try {
       final newFileName = await _determineFinalFileName();
       final baseDirectory = _selectedPermission!.rabbi.targetPath;
-
       final destinationDirectory =
           (_selectedSpecificPath != null && _selectedSpecificPath!.isNotEmpty)
           ? p.join(baseDirectory, _selectedSpecificPath!)
           : baseDirectory;
-
       final destinationPath = p.join(destinationDirectory, newFileName);
       final fileService = ref.read(fileServiceProvider);
-
       _logService.logInfo(
         'Copying/converting file from ${sourceFile.path} to $destinationPath (Convert to MP3: ${_appSettings!.convertToMp3})',
       );
@@ -337,7 +322,6 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
           newFileName: newFileName,
         );
       }
-
       await authState.maybeWhen(
         user: (user, device, mountPath) async {
           await ref
@@ -360,9 +344,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
           );
         },
       );
-
       _logService.logInfo('File transfer successful: $newFileName');
-
       await _showPostCopyOptionsDialog(sourceFile, newFileName);
     } catch (e, st) {
       _logService.logError(
@@ -382,13 +364,11 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       }
     }
   }
-
   Future<void> _pickHebrewDate() async {
     _logService.logUserActivity(
       'User opened Hebrew date picker. Current date: ${_selectedDate.toString()}',
     );
     final initial = _selectedDate.getGregorianCalendar();
-
     final currentJewishYear = JewishDate().getJewishYear();
     final firstHebrew =
         (JewishDate()
@@ -398,7 +378,6 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
         (JewishDate()
               ..setJewishDate(currentJewishYear + 50, JewishDate.ELUL, 29))
             .getGregorianCalendar();
-
     final DateTime? picked = await showMaterialHebrewDatePicker(
       context: context,
       initialDate: initial,
@@ -406,7 +385,6 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       lastDate: lastHebrew,
       hebrewFormat: true,
     );
-
     if (picked != null) {
       final newJd = JewishDate();
       newJd.setDate(picked);
@@ -416,7 +394,6 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       _logService.logInfo('Hebrew date picker cancelled.');
     }
   }
-
   Widget _buildHebrewKeyboard(Color buttonColor, Color textColor) {
     final buttonStyle = ElevatedButton.styleFrom(
       backgroundColor: buttonColor,
@@ -424,9 +401,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       padding: const EdgeInsets.symmetric(vertical: 16),
     );
-
     const keyTextStyle = TextStyle(fontSize: 22, fontWeight: FontWeight.bold);
-
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -513,7 +488,6 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       ],
     );
   }
-
   Widget _buildAudioPlayer() {
     String formatDuration(Duration? d) {
       if (d == null) return "--:--";
@@ -521,7 +495,6 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
       return "$minutes:$seconds";
     }
-
     return Card(
       clipBehavior: Clip.antiAlias,
       elevation: 2,
@@ -533,7 +506,6 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
             final playerState = snapshot.data;
             final processingState = playerState?.processingState;
             final playing = playerState?.playing;
-
             Widget playPauseButton;
             if (processingState == ProcessingState.loading ||
                 processingState == ProcessingState.buffering) {
@@ -564,7 +536,6 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
                 onPressed: () => _audioPlayer.seek(Duration.zero),
               );
             }
-
             return StreamBuilder<Duration?>(
               stream: _audioPlayer.durationStream,
               builder: (context, snapshot) {
@@ -588,12 +559,21 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
                                 .colorScheme
                                 .onSurface
                                 .withOpacity(0.3),
-                            value: position.inMilliseconds.toDouble(),
+                            value: (_pendingSeekMillis ??
+                                    position.inMilliseconds.toDouble())
+                                .clamp(
+                                  0,
+                                  duration.inMilliseconds.toDouble(),
+                                ),
                             max: duration.inMilliseconds.toDouble(),
-                            onChanged: (value) {
+                            onChanged: (value) => setState(
+                              () => _pendingSeekMillis = value,
+                            ),
+                            onChangeEnd: (value) {
                               _audioPlayer.seek(
                                 Duration(milliseconds: value.round()),
                               );
+                              setState(() => _pendingSeekMillis = null);
                             },
                           ),
                         ),
@@ -643,20 +623,16 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       ),
     );
   }
-
   @override
   Widget build(BuildContext context) {
     final allowedRabbisAsync = ref.watch(allowedRabbisProvider);
     final lastCopiedFileName = ref.watch(lastCopiedFileNameProvider);
-
     final theme = Theme.of(context);
     final buttonColor = theme.colorScheme.secondaryContainer;
     final buttonTextColor = theme.colorScheme.onSecondaryContainer;
-
     if (_appSettings == null) {
       return const Center(child: CircularProgressIndicator());
     }
-
     return Card(
       margin: const EdgeInsets.fromLTRB(4, 8, 8, 8),
       child: Padding(
@@ -678,7 +654,6 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       ),
     );
   }
-
   Widget _buildFormContent(
     ThemeData theme,
     AsyncValue<List<UserPermissionInfo>> allowedRabbisAsync,
@@ -733,11 +708,9 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
               ),
       );
     }
-
     bool showPathSelector =
         _selectedPermission != null &&
         _selectedPermission!.specificPaths.length > 1;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
