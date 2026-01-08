@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - dev
+      - fix-bugs
   workflow_dispatch:
 
 jobs:
