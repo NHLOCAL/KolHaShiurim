@@ -22,14 +22,13 @@ void main() {
     final firstScan = service.getConnectedDevices();
     final secondScan = service.getConnectedDevices();
 
-    expect(await secondScan, isEmpty);
-
     completer.complete([
       ConnectedDeviceInfo(mountPath: '/mnt/usb', serialNumber: 'ABCD-1234'),
     ]);
 
-    final firstResult = await firstScan;
-    expect(firstResult, hasLength(1));
+    final results = await Future.wait([firstScan, secondScan]);
+    expect(results[0], hasLength(1));
+    expect(results[1], hasLength(1));
     expect(scanCount, 1);
 
     service.dispose();

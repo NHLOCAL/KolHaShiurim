@@ -14,7 +14,7 @@ class DeviceService {
   final _controller = StreamController<List<ConnectedDeviceInfo>>.broadcast();
   final LogService _logService;
   Timer? _pollingTimer;
-  bool _isScanning = false;
+  Future<List<ConnectedDeviceInfo>>? _scanFuture;
   final DeviceScanner _scanDevices;
   static const _pollingInterval = Duration(seconds: 4);
 
@@ -27,7 +27,8 @@ class DeviceService {
       _controller.stream.distinct((a, b) => _areEqual(a, b));
 
   Future<List<ConnectedDeviceInfo>> getConnectedDevices() async {
-    return _performScan();
+    _scanFuture ??= _performScan();
+    return _scanFuture!;
   }
 
   void startPolling() {
@@ -48,10 +49,8 @@ class DeviceService {
   }
 
   Future<void> _performScanAndEmit() async {
-    if (_isScanning) return;
-    
     try {
-      final devices = await _performScan();
+      final devices = await getConnectedDevices();
       if (!_controller.isClosed) {
         _controller.add(devices);
       }
@@ -61,16 +60,13 @@ class DeviceService {
   }
 
   Future<List<ConnectedDeviceInfo>> _performScan() async {
-    if (_isScanning) return [];
-    _isScanning = true;
-
     try {
       return await _scanDevices();
     } catch (e, st) {
       _logService.logError('Fatal error in isolate scan', e, st);
       return [];
     } finally {
-      _isScanning = false;
+      _scanFuture = null;
     }
   }
 
