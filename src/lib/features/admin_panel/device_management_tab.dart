@@ -304,34 +304,43 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
     }
   }
   Future<void> _changeDeviceSerial() async {
-    if (!(_formKey.currentState?.validate() ?? false)) {
-      _logService.logWarning(
-        'Attempted to change device serial with invalid form data.',
-      );
-      return;
-    }
     setState(() => _isChangingSerial = true);
+    final newSerial = _generateRandomSerial();
     _logService.logUserActivity(
-      'Admin attempting to change serial for device at $_mountPath to ${_serialController.text}.',
+      'Admin initiating auto-change of device serial at $_mountPath to new random serial: $newSerial',
     );
     try {
       final resultMessage = await ref
           .read(deviceServiceProvider)
-          .changeVolumeSerialNumber(_mountPath!, _serialController.text);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('הפעולה הצליחה: $resultMessage'),
-            backgroundColor: Colors.green,
+          .changeVolumeSerialNumber(_mountPath!, newSerial);
+      _serialController.text = newSerial;
+      if (widget.device != null) {
+        await ref.read(databaseProvider).updateDevice(
+          DevicesCompanion(
+            id: drift.Value(widget.device!.id),
+            serialNumber: drift.Value(newSerial),
+            userId: drift.Value(_selectedUserId ?? widget.device!.userId),
+            sourcePath: drift.Value(_sourcePathController.text),
           ),
         );
         _logService.logUserActivity(
-          'Successfully changed serial number for device: $_mountPath to ${_serialController.text}. Message: $resultMessage',
+          'Database updated automatically with new serial for existing device ID: ${widget.device!.id}',
+        );
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'המספר הוחלף בהצלחה ל-$newSerial.\n$resultMessage\n(נתק וחבר את ההתקן)',
+            ),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 5),
+          ),
         );
       }
     } catch (e, st) {
       _logService.logError(
-        'Failed to change serial number for device at $_mountPath to ${_serialController.text}.',
+        'Failed to auto-change serial number for device at $_mountPath.',
         e,
         st,
       );
@@ -339,7 +348,7 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'שגיאה בשינוי המספר הסידורי. ייתכן שהתוכנה צריכה הרשאות מנהל. פרטים נוספים ביומן.',
+              'שגיאה בשינוי המספר הסידורי. וודא שיש הרשאות מנהל.',
             ),
             backgroundColor: Colors.red,
           ),
@@ -445,7 +454,7 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
                   suffixIcon: _isEditingSerial
                       ? IconButton(
                           icon: const Icon(Icons.casino_outlined),
-                          tooltip: 'צור מספר אקראי',
+                          tooltip: 'צור מספר אקראי (לתצוגה בלבד)',
                           onPressed: () {
                             _serialController.text = _generateRandomSerial();
                           },
@@ -466,19 +475,20 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
               ),
               if (Platform.isWindows && _mountPath != null)
                 Padding(
-                  padding: const EdgeInsets.only(top: 8.0),
-                  child: OutlinedButton.icon(
+                  padding: const EdgeInsets.only(top: 12.0),
+                  child: FilledButton.tonalIcon(
                     icon: _isChangingSerial
                         ? const SizedBox(
                             width: 16,
                             height: 16,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Icon(Icons.sync_alt),
-                    label: const Text("שנה מספר סריאלי בהתקן"),
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(double.infinity, 40),
-                      foregroundColor: Theme.of(context).colorScheme.primary,
+                        : const Icon(Icons.auto_fix_high),
+                    label: const Text("החלף למספר אקראי חדש (בהתקן ובDB)"),
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 48),
+                      backgroundColor: Colors.orange.shade100,
+                      foregroundColor: Colors.brown,
                     ),
                     onPressed: _isChangingSerial ? null : _changeDeviceSerial,
                   ),
