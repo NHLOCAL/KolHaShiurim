@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:drift/drift.dart' as drift;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -9,10 +10,12 @@ import 'package:kol_hashiurim/services/log_service.dart';
 
 class UserManagementTab extends ConsumerWidget {
   const UserManagementTab({super.key});
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final usersAsync = ref.watch(allUsersProvider);
     final logService = ref.read(logServiceProvider);
+
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
         icon: const Icon(Icons.add),
@@ -126,6 +129,7 @@ class UserManagementTab extends ConsumerWidget {
     );
     final formKey = GlobalKey<FormState>();
     final logService = ref.read(logServiceProvider);
+
     showDialog(
       context: context,
       builder: (context) {
@@ -269,6 +273,7 @@ class UserManagementTab extends ConsumerWidget {
 class _PermissionsDialog extends ConsumerStatefulWidget {
   final User user;
   const _PermissionsDialog({required this.user});
+
   @override
   ConsumerState<_PermissionsDialog> createState() => _PermissionsDialogState();
 }
@@ -278,6 +283,7 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
   Map<int, List<TextEditingController>> _pathControllers = {};
   bool _isLoading = true;
   late final LogService _logService;
+
   @override
   void initState() {
     super.initState();
@@ -303,9 +309,11 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
       final initialPermissions = await ref
           .read(databaseProvider)
           .getPermissionsForUser(widget.user.id);
+
       if (mounted) {
         final newSelectedIds = <int>{};
         final newControllers = <int, List<TextEditingController>>{};
+
         for (final p in initialPermissions) {
           newSelectedIds.add(p.rabbiId);
           final rawPathData = p.specificPath;
@@ -322,6 +330,7 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
               .map((path) => TextEditingController(text: path))
               .toList();
         }
+
         setState(() {
           _selectedRabbiIds = newSelectedIds;
           _pathControllers = newControllers;
@@ -363,46 +372,79 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
     _logService.logUserActivity(
       'Admin picking specific path for rabbi: ${rabbi.name}',
     );
-    final initialDirectory = rabbi.targetPath;
-    final selectedDirectory = await FilePicker.platform.getDirectoryPath(
-      initialDirectory: initialDirectory,
-      lockParentWindow: true,
-      dialogTitle: 'בחר תיקיית יעד ספציפית עבור ${rabbi.name}',
-    );
-    if (selectedDirectory == null ||
-        !selectedDirectory.startsWith(initialDirectory)) {
-      if (mounted) {
-        _logService.logWarning(
-          'Selected directory ($selectedDirectory) is not within rabbi\'s base path ($initialDirectory).',
-        );
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('יש לבחור תיקיה בתוך תיקיית הרב המוגדרת.'),
-          ),
-        );
+
+    String? initialDirectory = rabbi.targetPath;
+    
+    // Safety Check: Verify directory exists. If not, set initialDirectory to null
+    // to let the OS picker open at the default location instead of crashing.
+    if (initialDirectory.isNotEmpty) {
+      final dir = Directory(initialDirectory);
+      if (!await dir.exists()) {
+        _logService.logWarning('Initial directory does not exist: $initialDirectory. Using default picker location.');
+        initialDirectory = null;
       }
-      return;
+    } else {
+      initialDirectory = null;
     }
-    String relativePath = selectedDirectory.substring(initialDirectory.length);
-    relativePath = relativePath.replaceAll(r'\', '/');
-    if (relativePath.startsWith('/')) {
-      relativePath = relativePath.substring(1);
-    }
-    if (relativePath.endsWith('/')) {
-      relativePath = relativePath.substring(0, relativePath.length - 1);
-    }
-    if (mounted) {
-      _logService.logInfo(
-        'Selected relative path for rabbi ${rabbi.name}: $relativePath',
+
+    try {
+      final selectedDirectory = await FilePicker.platform.getDirectoryPath(
+        initialDirectory: initialDirectory,
+        lockParentWindow: true,
+        dialogTitle: 'בחר תיקיית יעד ספציפית עבור ${rabbi.name}',
       );
-      _pathControllers[rabbi.id]?[pathIndex].text = relativePath;
-      setState(() {});
+
+      if (selectedDirectory == null) {
+        // User cancelled
+        return;
+      }
+      
+      // We must check relation to base path from the Rabbi object, 
+      // not necessarily the one we used as initialDir (since user might have navigated elsewhere)
+      if (!selectedDirectory.startsWith(rabbi.targetPath)) {
+        if (mounted) {
+          _logService.logWarning(
+            'Selected directory ($selectedDirectory) is not within rabbi\'s base path (${rabbi.targetPath}).',
+          );
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('יש לבחור תיקיה בתוך תיקיית הרב המוגדרת.'),
+            ),
+          );
+        }
+        return;
+      }
+
+      String relativePath = selectedDirectory.substring(rabbi.targetPath.length);
+      relativePath = relativePath.replaceAll(r'\', '/');
+      if (relativePath.startsWith('/')) {
+        relativePath = relativePath.substring(1);
+      }
+      if (relativePath.endsWith('/')) {
+        relativePath = relativePath.substring(0, relativePath.length - 1);
+      }
+
+      if (mounted) {
+        _logService.logInfo(
+          'Selected relative path for rabbi ${rabbi.name}: $relativePath',
+        );
+        _pathControllers[rabbi.id]?[pathIndex].text = relativePath;
+        setState(() {});
+      }
+    } catch (e, st) {
+       _logService.logError('Failed to pick directory', e, st);
+       if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('שגיאה בפתיחת בוחר הקבצים. בדוק את הלוגים.')),
+          );
+       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final allRabbis = ref.watch(allRabbisProvider);
+
     return AlertDialog(
       title: Text('עריכת הרשאות עבור ${widget.user.name}'),
       content: SizedBox(
@@ -417,6 +459,7 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
                     if (isSelected && _pathControllers[rabbi.id] == null) {
                       _pathControllers[rabbi.id] = [];
                     }
+
                     return Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
