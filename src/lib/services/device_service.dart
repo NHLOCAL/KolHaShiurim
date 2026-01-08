@@ -8,14 +8,18 @@ import 'package:kol_hashiurim/models/device_info.dart';
 import 'package:kol_hashiurim/services/log_service.dart';
 import 'package:kol_hashiurim/services/device_scanner_isolate.dart';
 
+typedef DeviceScanner = Future<List<ConnectedDeviceInfo>> Function();
+
 class DeviceService {
   final _controller = StreamController<List<ConnectedDeviceInfo>>.broadcast();
   final LogService _logService;
   Timer? _pollingTimer;
   bool _isScanning = false;
+  final DeviceScanner _scanDevices;
   static const _pollingInterval = Duration(seconds: 4);
 
-  DeviceService(this._logService) {
+  DeviceService(this._logService, {DeviceScanner? scanDevices})
+      : _scanDevices = scanDevices ?? _scanDevicesViaIsolate {
     _logService.logInfo('DeviceService initialized (Isolate Mode).');
   }
 
@@ -61,21 +65,28 @@ class DeviceService {
     _isScanning = true;
 
     try {
-      final isolateResults = await compute(scanDevicesSync, null);
-      
-      final devices = isolateResults.map((d) => ConnectedDeviceInfo(
-        mountPath: d.path,
-        serialNumber: d.serial,
-      )).toList();
-
-      devices.sort((a, b) => a.mountPath.compareTo(b.mountPath));
-      return devices;
+      return await _scanDevices();
     } catch (e, st) {
       _logService.logError('Fatal error in isolate scan', e, st);
       return [];
     } finally {
       _isScanning = false;
     }
+  }
+
+  static Future<List<ConnectedDeviceInfo>> _scanDevicesViaIsolate() async {
+    final isolateResults = await compute(scanDevicesSync, null);
+    final devices = isolateResults
+        .map(
+          (d) => ConnectedDeviceInfo(
+            mountPath: d.path,
+            serialNumber: d.serial,
+          ),
+        )
+        .toList();
+
+    devices.sort((a, b) => a.mountPath.compareTo(b.mountPath));
+    return devices;
   }
 
   bool _areEqual(List<ConnectedDeviceInfo> a, List<ConnectedDeviceInfo> b) {
