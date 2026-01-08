@@ -157,7 +157,6 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
   String? _mountPath;
   bool _isLoading = false;
   bool _isChangingSerial = false;
-  bool _isEditingSerial = false;
   late final LogService _logService;
   @override
   void initState() {
@@ -170,7 +169,6 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
       text: widget.device?.sourcePath,
     );
     _selectedUserId = widget.device?.userId;
-    _isEditingSerial = widget.device == null;
     _mountPath = null;
     if (widget.device != null) {
       _findCurrentMountPath();
@@ -280,7 +278,6 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
         _mountPath = validDrive.mountPath;
         _serialController.text = validDrive.serialNumber;
         _sourcePathController.text = relativePath;
-        _isEditingSerial = false;
       });
       _logService.logInfo(
         'Device located successfully. MountPath: ${validDrive.mountPath}, Serial: ${validDrive.serialNumber}, SourcePath: $relativePath',
@@ -433,33 +430,9 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
               const SizedBox(height: 16),
               TextFormField(
                 controller: _serialController,
-                readOnly: !_isEditingSerial,
-                decoration: InputDecoration(
+                decoration: const InputDecoration(
                   labelText: 'מספר סידורי',
-                  border: const OutlineInputBorder(),
-                  prefixIcon: IconButton(
-                    icon: Icon(_isEditingSerial ? Icons.lock_open : Icons.edit),
-                    onPressed: () {
-                      setState(() {
-                        _isEditingSerial = !_isEditingSerial;
-                        _logService.logInfo(
-                          'Admin toggled serial number editing for device dialog. Now: $_isEditingSerial',
-                        );
-                      });
-                    },
-                    tooltip: _isEditingSerial
-                        ? 'נעל עריכה'
-                        : 'אפשר עריכה ידנית',
-                  ),
-                  suffixIcon: _isEditingSerial
-                      ? IconButton(
-                          icon: const Icon(Icons.casino_outlined),
-                          tooltip: 'צור מספר אקראי (לתצוגה בלבד)',
-                          onPressed: () {
-                            _serialController.text = _generateRandomSerial();
-                          },
-                        )
-                      : null,
+                  border: OutlineInputBorder(),
                 ),
                 validator: (v) {
                   if (v == null || v.isEmpty) return 'שדה חובה';
@@ -484,7 +457,7 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.auto_fix_high),
-                    label: const Text("החלף למספר אקראי חדש (בהתקן ובDB)"),
+                    label: const Text("החלף מספר סידורי בהתקן"),
                     style: FilledButton.styleFrom(
                       minimumSize: const Size(double.infinity, 48),
                       backgroundColor: Colors.orange.shade100,
