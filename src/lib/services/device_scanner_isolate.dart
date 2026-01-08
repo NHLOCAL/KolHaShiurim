@@ -12,6 +12,7 @@ class IsolateDeviceInfo {
 List<IsolateDeviceInfo> scanDevicesSync(void _) {
   final devices = <IsolateDeviceInfo>[];
   
+  // Suppress system error dialogs during scanning
   int oldMode = SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
   
   try {
@@ -26,8 +27,11 @@ List<IsolateDeviceInfo> scanDevicesSync(void _) {
       
       try {
         if (GetDriveType(rootPtr) == DRIVE_REMOVABLE) {
-          final volName = calloc<Uint16>(MAX_PATH);
-          final fsName = calloc<Uint16>(MAX_PATH);
+          // Allocate buffers as Uint16 first (array of 16-bit integers)
+          // Then cast to Utf16 pointers which Win32 APIs expect
+          final volName = calloc<Uint16>(MAX_PATH).cast<Utf16>();
+          final fsName = calloc<Uint16>(MAX_PATH).cast<Utf16>();
+          
           final serialPtr = calloc<Uint32>();
           final maxComp = calloc<Uint32>();
           final flags = calloc<Uint32>();
@@ -58,6 +62,7 @@ List<IsolateDeviceInfo> scanDevicesSync(void _) {
           }
         }
       } catch (e) {
+        // Ignore errors for specific drives
       } finally {
         calloc.free(rootPtr);
       }
