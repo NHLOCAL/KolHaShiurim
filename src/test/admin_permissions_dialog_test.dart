@@ -66,5 +66,9 @@ void main() {
     final savedPaths =
         json.decode(savedPermissions.first.specificPath!) as List<dynamic>;
     expect(savedPaths, ['folder/one', 'folder/two']);
+
+    // Dispose the widget tree and flush pending timers before the test ends.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
   });
 }
