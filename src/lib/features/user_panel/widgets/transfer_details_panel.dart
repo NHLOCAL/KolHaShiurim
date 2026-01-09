@@ -31,7 +31,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
   bool _isCopying = false;
   AppSetting? _appSettings;
   late final LogService _logService;
-  late final AudioPlayer _audioPlayer;
+  AudioPlayer? _audioPlayer;
   double? _pendingSeekMillis;
   final List<List<String>> _hebrewKeys = const [
     ['-', '0', '9', '8', '7', '6', '5', '4', '3', '2', '1'],
@@ -57,20 +57,21 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
   /// Handles the safe transition between audio files to prevent threading errors
   /// on Windows (avoiding race conditions between stop and setFilePath).
   Future<void> _handleFileChange() async {
+    // Always reset UI form when selection changes.
+    _resetForm();
+    final audioPlayer = _audioPlayer;
+    if (audioPlayer == null || widget.selectedFile == null) {
+      return;
+    }
     try {
-      // 1. Stop playback properly and wait for it to finish
-      if (_audioPlayer.playing || _audioPlayer.processingState != ProcessingState.idle) {
-        await _audioPlayer.stop();
+      // Stop playback properly and wait for it to finish.
+      if (audioPlayer.playing ||
+          audioPlayer.processingState != ProcessingState.idle) {
+        await audioPlayer.stop();
       }
-      // 2. Clear previous state if needed
-      if (widget.selectedFile == null) {
-        return;
-      }
-      // 3. Reset UI form
-      _resetForm();
-      // 4. Load new file only if widget is still mounted
+      // Load new file only if widget is still mounted.
       if (mounted && widget.selectedFile != null) {
-         await _audioPlayer.setFilePath(widget.selectedFile!.path);
+        await audioPlayer.setFilePath(widget.selectedFile!.path);
       }
     } catch (e) {
       _logService.logError(
@@ -97,8 +98,52 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
   @override
   void dispose() {
     _topicController.dispose();
-    _audioPlayer.dispose();
+    _audioPlayer?.dispose();
     super.dispose();
+  }
+
+  Future<void> _suspendAudioPlayer() async {
+    final audioPlayer = _audioPlayer;
+    if (audioPlayer == null) {
+      return;
+    }
+    if (mounted) {
+      setState(() {
+        _audioPlayer = null;
+      });
+    } else {
+      _audioPlayer = null;
+    }
+    try {
+      await audioPlayer.stop();
+    } catch (e, st) {
+      _logService.logError('Failed to stop audio player before transfer', e, st);
+    }
+    try {
+      await audioPlayer.dispose();
+      _logService.logInfo('Audio player disposed before transfer.');
+    } catch (e, st) {
+      _logService.logError('Failed to dispose audio player before transfer', e, st);
+    }
+  }
+
+  Future<void> _restoreAudioPlayer() async {
+    if (!mounted || _audioPlayer != null) {
+      return;
+    }
+    setState(() {
+      _audioPlayer = AudioPlayer();
+    });
+    final audioPlayer = _audioPlayer;
+    if (audioPlayer == null || widget.selectedFile == null) {
+      return;
+    }
+    try {
+      await audioPlayer.setFilePath(widget.selectedFile!.path);
+      _logService.logInfo('Audio player restored after transfer.');
+    } catch (e, st) {
+      _logService.logError('Failed to restore audio player after transfer', e, st);
+    }
   }
   void _resetForm() {
     _logService.logInfo('Resetting transfer form.');
@@ -285,7 +330,6 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
     widget.onCopyComplete();
   }
   Future<void> _copyFile() async {
-    await _audioPlayer.stop();
     if (widget.selectedFile == null ||
         _selectedPermission == null ||
         _appSettings == null) {
@@ -304,6 +348,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       );
       return;
     }
+    await _suspendAudioPlayer();
     setState(() => _isCopying = true);
     ref.read(lastCopiedFileNameProvider.notifier).state = null;
     final scaffoldMessenger = ScaffoldMessenger.of(context);
@@ -404,6 +449,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       if (mounted) {
         setState(() => _isCopying = false);
       }
+      await _restoreAudioPlayer();
     }
   }
   Future<void> _pickHebrewDate() async {
@@ -531,6 +577,10 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
     );
   }
   Widget _buildAudioPlayer() {
+    final audioPlayer = _audioPlayer;
+    if (audioPlayer == null) {
+      return const SizedBox.shrink();
+    }
     String formatDuration(Duration? d) {
       if (d == null) return "--:--";
       final minutes = d.inMinutes.remainder(60).toString().padLeft(2, '0');
@@ -543,7 +593,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
         child: StreamBuilder<PlayerState>(
-          stream: _audioPlayer.playerStateStream,
+          stream: audioPlayer.playerStateStream,
           builder: (context, snapshot) {
             final playerState = snapshot.data;
             final processingState = playerState?.processingState;
@@ -563,27 +613,27 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
               playPauseButton = IconButton(
                 icon: const Icon(Icons.play_arrow),
                 iconSize: 32,
-                onPressed: _audioPlayer.play,
+                onPressed: audioPlayer.play,
               );
             } else if (processingState != ProcessingState.completed) {
               playPauseButton = IconButton(
                 icon: const Icon(Icons.pause),
                 iconSize: 32,
-                onPressed: _audioPlayer.pause,
+                onPressed: audioPlayer.pause,
               );
             } else {
               playPauseButton = IconButton(
                 icon: const Icon(Icons.replay),
                 iconSize: 32,
-                onPressed: () => _audioPlayer.seek(Duration.zero),
+                onPressed: () => audioPlayer.seek(Duration.zero),
               );
             }
             return StreamBuilder<Duration?>(
-              stream: _audioPlayer.durationStream,
+              stream: audioPlayer.durationStream,
               builder: (context, snapshot) {
                 final duration = snapshot.data ?? Duration.zero;
                 return StreamBuilder<Duration>(
-                  stream: _audioPlayer.positionStream,
+                  stream: audioPlayer.positionStream,
                   builder: (context, snapshot) {
                     var position = snapshot.data ?? Duration.zero;
                     if (position > duration) position = duration;
@@ -612,7 +662,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
                               () => _pendingSeekMillis = value,
                             ),
                             onChangeEnd: (value) {
-                              _audioPlayer.seek(
+                              audioPlayer.seek(
                                 Duration(milliseconds: value.round()),
                               );
                               setState(() => _pendingSeekMillis = null);
@@ -624,7 +674,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                         StreamBuilder<double>(
-                          stream: _audioPlayer.volumeStream,
+                          stream: audioPlayer.volumeStream,
                           builder: (context, snapshot) {
                             return Row(
                               children: [
@@ -647,7 +697,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
                                         .onSurface
                                         .withOpacity(0.3),
                                     value: snapshot.data ?? 1.0,
-                                    onChanged: _audioPlayer.setVolume,
+                                    onChanged: audioPlayer.setVolume,
                                   ),
                                 ),
                               ],

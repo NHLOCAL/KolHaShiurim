@@ -54,15 +54,18 @@ class AuthStateNotifier extends StateNotifier<AppUserState> {
   late final LogService _logService;
   late final DeviceService _deviceService;
 
-  AuthStateNotifier(this._ref) : super(const AppUserState.loggedOut()) {
+  AuthStateNotifier(this._ref, {bool enableDevicePolling = true})
+      : super(const AppUserState.loggedOut()) {
     _logService = _ref.read(logServiceProvider);
     _deviceService = _ref.read(deviceServiceProvider);
-    _listenForDevices();
-    
-    _deviceService.startPolling();
-    _logService.logInfo(
-      'Application started, device polling initiated.',
-    );
+    if (enableDevicePolling) {
+      _listenForDevices();
+
+      _deviceService.startPolling();
+      _logService.logInfo(
+        'Application started, device polling initiated.',
+      );
+    }
   }
 
   void _listenForDevices() {
