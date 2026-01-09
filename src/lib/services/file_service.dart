@@ -93,6 +93,11 @@ class FileService {
       );
     }
     final safeFileName = _getSafeFileName(newFileName);
+    if (safeFileName != newFileName) {
+      _logService.logInfo(
+        'Sanitized copy filename from "$newFileName" to "$safeFileName".',
+      );
+    }
     _logService.logInfo(
       'Attempting to copy file from ${sourceFile.path} to $destinationDirectory/$safeFileName',
     );
@@ -116,6 +121,14 @@ class FileService {
     final destinationPath = p.join(destinationDirectory, safeFileName);
     try {
       await sourceFile.copy(destinationPath);
+      if (!await File(destinationPath).exists()) {
+        _logService.logError(
+          'Copy reported success but destination file missing: $destinationPath',
+          null,
+          StackTrace.current,
+        );
+        throw Exception('Copy did not produce destination file.');
+      }
       _logService.logInfo(
         'File copied successfully to $destinationPath.',
       );
@@ -145,6 +158,11 @@ class FileService {
       );
     }
     final safeFileName = _getSafeFileName(newFileName);
+    if (safeFileName != newFileName) {
+      _logService.logInfo(
+        'Sanitized conversion filename from "$newFileName" to "$safeFileName".',
+      );
+    }
     _logService.logInfo(
       'Attempting to convert and copy file from ${sourceFile.path} to $destinationDirectory/$safeFileName with bitrate ${bitrate}k',
     );

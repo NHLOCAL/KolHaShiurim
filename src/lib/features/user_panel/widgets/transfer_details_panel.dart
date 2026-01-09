@@ -313,6 +313,21 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       'User initiating file transfer for: ${sourceFile.path}',
     );
     try {
+      final fileSize = await sourceFile.length();
+      _logService.logInfo(
+        'Source file size: $fileSize bytes.',
+      );
+    } catch (e, st) {
+      _logService.logWarning(
+        'Failed to read source file size: $e',
+      );
+      _logService.logError(
+        'Error reading source file size.',
+        e,
+        st,
+      );
+    }
+    try {
       final newFileName = await _determineFinalFileName();
       final baseDirectory = _selectedPermission!.rabbi.targetPath;
       final destinationDirectory =
@@ -323,6 +338,9 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       final fileService = ref.read(fileServiceProvider);
       _logService.logInfo(
         'Copying/converting file from ${sourceFile.path} to $destinationPath (Convert to MP3: ${_appSettings!.convertToMp3})',
+      );
+      _logService.logInfo(
+        'User target details: rabbi="${_selectedPermission!.rabbi.name}", base="$baseDirectory", specific="${_selectedSpecificPath ?? ''}".',
       );
       if (_appSettings!.convertToMp3) {
         await fileService.convertAndCopyFile(
@@ -361,7 +379,15 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
         },
       );
       _logService.logInfo('File transfer successful: $newFileName');
-      await _showPostCopyOptionsDialog(sourceFile, newFileName);
+      try {
+        await _showPostCopyOptionsDialog(sourceFile, newFileName);
+      } catch (e, st) {
+        _logService.logError(
+          'Failed to show post-copy dialog.',
+          e,
+          st,
+        );
+      }
     } catch (e, st) {
       _logService.logError(
         'Error during file transfer from ${sourceFile.path}',
