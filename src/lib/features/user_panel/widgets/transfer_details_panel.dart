@@ -9,6 +9,8 @@ import 'package:kol_hashiurim/core/database/database.dart';
 import 'package:kol_hashiurim/core/providers/providers.dart';
 import 'package:kol_hashiurim/features/user_panel/providers/user_panel_providers.dart';
 import 'package:kol_hashiurim/services/log_service.dart';
+import 'package:kol_hashiurim/utils/file_name_sanitizer.dart';
+
 class TransferDetailsPanel extends ConsumerStatefulWidget {
   final File? selectedFile;
   final VoidCallback onCopyComplete;
@@ -123,8 +125,12 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
         : p.extension(widget.selectedFile!.path);
     final fileName =
         'XX - $dateStr - ${_selectedPermission!.rabbi.name}${sanitizedTopic.isNotEmpty ? ' - $sanitizedTopic' : ''}$extension';
-    _logService.logInfo('Generated new file name preview: $fileName');
-    return fileName;
+    final safeFileName = sanitizeFileName(
+      fileName,
+      fallback: 'שיעור$extension',
+    );
+    _logService.logInfo('Generated new file name preview: $safeFileName');
+    return safeFileName;
   }
   Future<String> _determineFinalFileName() async {
     if (_selectedPermission == null || widget.selectedFile == null) {
@@ -184,13 +190,23 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
     final formattedNumber = nextNumber.toString().padLeft(2, '0');
     final finalFileName =
         '$formattedNumber - $dateStr - $rabbiName${sanitizedTopic.isNotEmpty ? ' - $sanitizedTopic' : ''}$extension';
-    _logService.logInfo('Determined final file name: $finalFileName');
-    return finalFileName;
+    final safeFileName = sanitizeFileName(
+      finalFileName,
+      fallback: 'שיעור$extension',
+    );
+    _logService.logInfo('Determined final file name: $safeFileName');
+    return safeFileName;
   }
   Future<void> _showPostCopyOptionsDialog(
     File sourceFile,
     String newFileName,
   ) async {
+    if (!mounted) {
+      _logService.logWarning(
+        'Skipping post-copy dialog because widget is unmounted.',
+      );
+      return;
+    }
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     final theme = Theme.of(context);
     await showDialog(

@@ -37,7 +37,10 @@ class DeviceService {
     }
     _logService.logInfo('Starting device polling via Isolate.');
     _performScanAndEmit();
-    _pollingTimer = Timer.periodic(_pollingInterval, (_) => _performScanAndEmit());
+    _pollingTimer = Timer.periodic(
+      _pollingInterval,
+      (_) => _performScanAndEmit(),
+    );
   }
 
   void stopPolling() {
@@ -93,9 +96,15 @@ class DeviceService {
   }
 
   Future<String> changeVolumeSerialNumber(String mount, String serial) async {
-    stopPolling(); 
+    stopPolling();
     _logService.logUserActivity('Changing serial for $mount to $serial.');
-    
+
+    if (!Platform.isWindows) {
+      startPolling();
+      throw UnsupportedError(
+        'Volume serial changes are only supported on Windows.',
+      );
+    }
     final s = serial.replaceAll('-', '');
     if (!RegExp(r'^[0-9A-Fa-f]{8}$').hasMatch(s)) {
       startPolling();
@@ -104,27 +113,36 @@ class DeviceService {
     final formatted = '${s.substring(0, 4)}-${s.substring(4)}';
 
     try {
+      final normalizedMount = _normalizeMountPath(mount);
+      if (!await Directory(normalizedMount).exists()) {
+        throw FileSystemException(
+          'Mount path is not available',
+          normalizedMount,
+        );
+      }
       final tempDir = await getTemporaryDirectory();
       final volumeIdPath = p.join(tempDir.path, 'Volumeid.exe');
       final volumeIdFile = File(volumeIdPath);
-      
-      if (!await volumeIdFile.exists()) {
-         final byteData = await rootBundle.load('assets/bin/Volumeid.exe');
-         await volumeIdFile.writeAsBytes(
-           byteData.buffer.asUint8List(
-             byteData.offsetInBytes,
-             byteData.lengthInBytes,
-           ),
-         );
+
+      if (!await volumeIdFile.exists() || await volumeIdFile.length() == 0) {
+        final byteData = await rootBundle.load('assets/bin/Volumeid.exe');
+        await volumeIdFile.writeAsBytes(
+          byteData.buffer.asUint8List(
+            byteData.offsetInBytes,
+            byteData.lengthInBytes,
+          ),
+        );
       }
 
       final result = await Process.run(volumeIdPath, [
-        mount.substring(0, mount.length - 1), 
+        normalizedMount.substring(0, 2),
         formatted,
       ], runInShell: true);
 
       if (result.exitCode != 0) {
-        throw Exception('Failed: ${result.stderr}');
+        throw Exception(
+          'Failed: exit code ${result.exitCode}. StdOut: ${result.stdout}. StdErr: ${result.stderr}',
+        );
       }
 
       _logService.logUserActivity('Serial changed successfully.');
@@ -133,8 +151,20 @@ class DeviceService {
       _logService.logError('Error running volumeid.exe', e, st);
       rethrow;
     } finally {
-      startPolling(); 
+      startPolling();
     }
+  }
+
+  String _normalizeMountPath(String mount) {
+    final trimmed = mount.trim();
+    if (trimmed.isEmpty) {
+      throw const FormatException('Mount path cannot be empty.');
+    }
+    final normalized = trimmed.endsWith('\\') ? trimmed : '$trimmed\\';
+    if (!RegExp(r'^[A-Za-z]:\\$').hasMatch(normalized)) {
+      throw FormatException('Mount path must be a drive root like "F:\\".');
+    }
+    return normalized;
   }
 
   void dispose() {
