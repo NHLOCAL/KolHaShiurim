@@ -17,6 +17,16 @@ class FileService {
     ProcessRunner? processRunner,
   }) : _processRunner = processRunner ?? Process.run;
 
+  String _getSafeFileName(String newFileName) {
+    final extension = p.extension(newFileName);
+    final fallbackName =
+        extension.isNotEmpty ? 'untitled$extension' : 'untitled';
+    return sanitizeFileName(
+      newFileName,
+      fallback: fallbackName,
+    );
+  }
+
   Future<List<File>> getAudioFiles(String directoryPath) async {
     _logService.logInfo(
       'Attempting to get audio files from: $directoryPath',
@@ -82,13 +92,7 @@ class FileService {
         sourceFile.path,
       );
     }
-    final extension = p.extension(newFileName);
-    final fallbackName =
-        extension.isNotEmpty ? 'untitled$extension' : 'untitled';
-    final safeFileName = sanitizeFileName(
-      newFileName,
-      fallback: fallbackName,
-    );
+    final safeFileName = _getSafeFileName(newFileName);
     _logService.logInfo(
       'Attempting to copy file from ${sourceFile.path} to $destinationDirectory/$safeFileName',
     );
@@ -140,13 +144,7 @@ class FileService {
         sourceFile.path,
       );
     }
-    final extension = p.extension(newFileName);
-    final fallbackName =
-        extension.isNotEmpty ? 'untitled$extension' : 'untitled';
-    final safeFileName = sanitizeFileName(
-      newFileName,
-      fallback: fallbackName,
-    );
+    final safeFileName = _getSafeFileName(newFileName);
     _logService.logInfo(
       'Attempting to convert and copy file from ${sourceFile.path} to $destinationDirectory/$safeFileName with bitrate ${bitrate}k',
     );
