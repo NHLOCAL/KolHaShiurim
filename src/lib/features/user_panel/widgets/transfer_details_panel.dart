@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import 'package:kol_hashiurim/core/database/database.dart';
 import 'package:kol_hashiurim/core/providers/providers.dart';
 import 'package:kol_hashiurim/features/user_panel/providers/user_panel_providers.dart';
+import 'package:kol_hashiurim/features/user_panel/utils/permission_selection.dart';
 import 'package:kol_hashiurim/services/log_service.dart';
 import 'package:kol_hashiurim/utils/file_name_sanitizer.dart';
 
@@ -331,15 +332,43 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
   }
   Future<void> _copyFile() async {
     if (widget.selectedFile == null ||
-        _selectedPermission == null ||
         _appSettings == null) {
       _logService.logWarning(
         'Attempted to copy file with missing selections (file, permission, or settings).',
       );
       return;
     }
-    if (_selectedPermission!.specificPaths.length > 1 &&
-        _selectedSpecificPath == null) {
+    final permissions = ref.read(allowedRabbisProvider).maybeWhen(
+          data: (data) => data,
+          orElse: () => <UserPermissionInfo>[],
+        );
+    final resolvedSelection = resolvePermissionSelection(
+      selectedPermission: _selectedPermission,
+      selectedSpecificPath: _selectedSpecificPath,
+      availablePermissions: permissions,
+    );
+    if (resolvedSelection.permission == null) {
+      _logService.logWarning(
+        'Attempted to copy file without a valid permission selection.',
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('יש לבחור רב יעד להעברה'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    if (mounted &&
+        (resolvedSelection.permission != _selectedPermission ||
+            resolvedSelection.specificPath != _selectedSpecificPath)) {
+      setState(() {
+        _selectedPermission = resolvedSelection.permission;
+        _selectedSpecificPath = resolvedSelection.specificPath;
+      });
+    }
+    if (resolvedSelection.isPathSelectionRequired &&
+        resolvedSelection.specificPath == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('יש לבחור תיקיית משנה ליעד'),
@@ -354,6 +383,8 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     final authState = ref.read(authStateProvider);
     final sourceFile = widget.selectedFile!;
+    final selectedPermission = resolvedSelection.permission;
+    final selectedSpecificPath = resolvedSelection.specificPath;
     _logService.logUserActivity(
       'User initiating file transfer for: ${sourceFile.path}',
     );
@@ -374,10 +405,10 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
     }
     try {
       final newFileName = await _determineFinalFileName();
-      final baseDirectory = _selectedPermission!.rabbi.targetPath;
+      final baseDirectory = selectedPermission!.rabbi.targetPath;
       final destinationDirectory =
-          (_selectedSpecificPath != null && _selectedSpecificPath!.isNotEmpty)
-          ? p.join(baseDirectory, _selectedSpecificPath!)
+          (selectedSpecificPath != null && selectedSpecificPath.isNotEmpty)
+          ? p.join(baseDirectory, selectedSpecificPath)
           : baseDirectory;
       final destinationPath = p.join(destinationDirectory, newFileName);
       final fileService = ref.read(fileServiceProvider);
@@ -385,7 +416,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
         'Copying/converting file from ${sourceFile.path} to $destinationPath (Convert to MP3: ${_appSettings!.convertToMp3})',
       );
       _logService.logInfo(
-        'User target details: rabbi="${_selectedPermission!.rabbi.name}", base="$baseDirectory", specific="${_selectedSpecificPath ?? ''}".',
+        'User target details: rabbi="${selectedPermission.rabbi.name}", base="$baseDirectory", specific="${selectedSpecificPath ?? ''}".',
       );
       if (_appSettings!.convertToMp3) {
         await fileService.convertAndCopyFile(
@@ -800,9 +831,26 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
               ),
       );
     }
-    bool showPathSelector =
-        _selectedPermission != null &&
-        _selectedPermission!.specificPaths.length > 1;
+    final permissions = allowedRabbisAsync.value ?? const <UserPermissionInfo>[];
+    final resolvedSelection = resolvePermissionSelection(
+      selectedPermission: _selectedPermission,
+      selectedSpecificPath: _selectedSpecificPath,
+      availablePermissions: permissions,
+    );
+    if (mounted &&
+        (resolvedSelection.permission != _selectedPermission ||
+            resolvedSelection.specificPath != _selectedSpecificPath)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _selectedPermission = resolvedSelection.permission;
+          _selectedSpecificPath = resolvedSelection.specificPath;
+        });
+      });
+    }
+    final showPathSelector = resolvedSelection.isPathSelectionRequired;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -825,7 +873,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
                 allowedRabbisAsync.when(
                   data: (permissions) =>
                       DropdownButtonFormField<UserPermissionInfo>(
-                        value: _selectedPermission,
+                        value: resolvedSelection.permission,
                         items: permissions
                             .map(
                               (p) => DropdownMenuItem(
@@ -870,8 +918,8 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
                 if (showPathSelector) ...[
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String?>(
-                    value: _selectedSpecificPath,
-                    items: _selectedPermission!.specificPaths
+                    value: resolvedSelection.specificPath,
+                    items: resolvedSelection.permission!.specificPaths
                         .map(
                           (path) => DropdownMenuItem(
                             value: path,
