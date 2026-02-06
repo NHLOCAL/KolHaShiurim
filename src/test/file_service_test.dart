@@ -35,7 +35,7 @@ void main() {
 
     final fileService = FileService(
       _TestLogService(),
-      processRunner: (executable, arguments) async {
+      processRunner: (executable, arguments, {timeout}) async {
         return ProcessResult(0, 1, '', 'ffmpeg missing');
       },
     );
@@ -62,7 +62,7 @@ void main() {
 
     final fileService = FileService(
       _TestLogService(),
-      processRunner: (executable, arguments) async {
+      processRunner: (executable, arguments, {timeout}) async {
         if (arguments.length == 1 && arguments.first == '-version') {
           return ProcessResult(0, 0, 'ffmpeg version', '');
         }

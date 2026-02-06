@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:kol_hashiurim/services/log_service.dart';
@@ -5,18 +6,25 @@ import 'package:kol_hashiurim/utils/file_name_sanitizer.dart';
 
 typedef ProcessRunner = Future<ProcessResult> Function(
   String executable,
-  List<String> arguments,
-);
+  List<String> arguments, {
+  Duration? timeout,
+});
 
 class FileService {
   final LogService _logService;
   final ProcessRunner _processRunner;
   bool? _ffmpegAvailable;
+  final Duration _ffmpegCheckTimeout;
+  final Duration _ffmpegConversionTimeout;
 
   FileService(
     this._logService, {
     ProcessRunner? processRunner,
-  }) : _processRunner = processRunner ?? Process.run;
+    Duration ffmpegCheckTimeout = const Duration(seconds: 5),
+    Duration ffmpegConversionTimeout = const Duration(minutes: 10),
+  })  : _processRunner = processRunner ?? Process.run,
+        _ffmpegCheckTimeout = ffmpegCheckTimeout,
+        _ffmpegConversionTimeout = ffmpegConversionTimeout;
 
   String _getSafeFileName(String newFileName) {
     final extension = p.extension(newFileName);
@@ -33,7 +41,11 @@ class FileService {
       return;
     }
     try {
-      final result = await _processRunner('ffmpeg', ['-version']);
+      final result = await _processRunner(
+        'ffmpeg',
+        ['-version'],
+        timeout: _ffmpegCheckTimeout,
+      );
       if (result.exitCode == 0) {
         _ffmpegAvailable = true;
         await _logService.logInfo('FFmpeg availability check passed.');
@@ -57,6 +69,16 @@ class FileService {
       );
       throw Exception(
         'Failed to execute ffmpeg. Please install FFmpeg and ensure it is in your PATH. Error: $e',
+      );
+    } on TimeoutException catch (e, st) {
+      _ffmpegAvailable = false;
+      await _logService.logError(
+        'FFmpeg availability check timed out after $_ffmpegCheckTimeout.',
+        e,
+        st,
+      );
+      throw Exception(
+        'FFmpeg availability check timed out. Please verify FFmpeg responsiveness and PATH settings.',
       );
     }
   }
@@ -220,6 +242,7 @@ class FileService {
     final destinationPath = p.join(destinationDirectory, safeFileName);
 
     final args = [
+      '-nostdin',
       '-i',
       sourceFile.path,
       '-y', // Overwrite output files without asking
@@ -230,7 +253,11 @@ class FileService {
 
     try {
       _logService.logInfo('Executing FFmpeg with arguments: $args');
-      final result = await _processRunner('ffmpeg', args);
+      final result = await _processRunner(
+        'ffmpeg',
+        args,
+        timeout: _ffmpegConversionTimeout,
+      );
 
       if (result.exitCode != 0) {
         _logService.logError(
@@ -261,6 +288,15 @@ class FileService {
       );
       throw Exception(
         'Failed to execute ffmpeg. Is it installed and in your PATH? Error: $e',
+      );
+    } on TimeoutException catch (e, st) {
+      _logService.logError(
+        'FFmpeg conversion timed out after $_ffmpegConversionTimeout.',
+        e,
+        st,
+      );
+      throw Exception(
+        'FFmpeg conversion timed out. Please verify the source file and try again.',
       );
     } catch (e, st) {
       _logService.logError(
