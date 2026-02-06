@@ -156,8 +156,8 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       _pendingSeekMillis = null;
     });
   }
-  String _getNewFileName() {
-    if (_selectedPermission == null || widget.selectedFile == null) {
+  String _getNewFileName(UserPermissionInfo? permission) {
+    if (permission == null || widget.selectedFile == null) {
       return 'שם קובץ...';
     }
     final formatter = HebrewDateFormatter()
@@ -170,7 +170,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
         ? '.mp3'
         : p.extension(widget.selectedFile!.path);
     final fileName =
-        'XX - $dateStr - ${_selectedPermission!.rabbi.name}${sanitizedTopic.isNotEmpty ? ' - $sanitizedTopic' : ''}$extension';
+        'XX - $dateStr - ${permission.rabbi.name}${sanitizedTopic.isNotEmpty ? ' - $sanitizedTopic' : ''}$extension';
     final safeFileName = sanitizeFileName(
       fileName,
       fallback: 'שיעור$extension',
@@ -178,8 +178,11 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
     _logService.logInfo('Generated new file name preview: $safeFileName');
     return safeFileName;
   }
-  Future<String> _determineFinalFileName() async {
-    if (_selectedPermission == null || widget.selectedFile == null) {
+  Future<String> _determineFinalFileName({
+    required UserPermissionInfo permission,
+    required String? specificPath,
+  }) async {
+    if (widget.selectedFile == null) {
       _logService.logError(
         "Cannot determine final filename, selection is incomplete.",
         null,
@@ -196,11 +199,11 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
     final extension = (_appSettings?.convertToMp3 ?? false)
         ? '.mp3'
         : p.extension(widget.selectedFile!.path);
-    final rabbiName = _selectedPermission!.rabbi.name;
-    final baseDirectory = _selectedPermission!.rabbi.targetPath;
+    final rabbiName = permission.rabbi.name;
+    final baseDirectory = permission.rabbi.targetPath;
     final destinationDirectory =
-        (_selectedSpecificPath != null && _selectedSpecificPath!.isNotEmpty)
-        ? p.join(baseDirectory, _selectedSpecificPath!)
+        (specificPath != null && specificPath.isNotEmpty)
+        ? p.join(baseDirectory, specificPath)
         : baseDirectory;
     int nextNumber = 1;
     try {
@@ -404,7 +407,10 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       );
     }
     try {
-      final newFileName = await _determineFinalFileName();
+      final newFileName = await _determineFinalFileName(
+        permission: selectedPermission!,
+        specificPath: selectedSpecificPath,
+      );
       final baseDirectory = selectedPermission!.rabbi.targetPath;
       final destinationDirectory =
           (selectedSpecificPath != null && selectedSpecificPath.isNotEmpty)
@@ -969,7 +975,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
                 Text('שם קובץ היעד:', style: theme.textTheme.titleMedium),
                 const SizedBox(height: 4),
                 SelectableText(
-                  _getNewFileName(),
+                  _getNewFileName(resolvedSelection.permission),
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: theme.colorScheme.secondary,
                   ),
@@ -1001,7 +1007,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
               fontWeight: FontWeight.bold,
             ),
           ),
-          onPressed: _selectedPermission == null ? null : _copyFile,
+          onPressed: resolvedSelection.permission == null ? null : _copyFile,
         ),
       ],
     );

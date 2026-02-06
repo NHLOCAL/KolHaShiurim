@@ -11,6 +11,7 @@ typedef ProcessRunner = Future<ProcessResult> Function(
 class FileService {
   final LogService _logService;
   final ProcessRunner _processRunner;
+  bool? _ffmpegAvailable;
 
   FileService(
     this._logService, {
@@ -25,6 +26,39 @@ class FileService {
       newFileName,
       fallback: fallbackName,
     );
+  }
+
+  Future<void> _ensureFfmpegAvailable() async {
+    if (_ffmpegAvailable == true) {
+      return;
+    }
+    try {
+      final result = await _processRunner('ffmpeg', ['-version']);
+      if (result.exitCode == 0) {
+        _ffmpegAvailable = true;
+        await _logService.logInfo('FFmpeg availability check passed.');
+        return;
+      }
+      _ffmpegAvailable = false;
+      await _logService.logError(
+        'FFmpeg availability check failed (exit code ${result.exitCode}). StdOut: ${result.stdout}, StdErr: ${result.stderr}',
+        null,
+        StackTrace.current,
+      );
+      throw Exception(
+        'FFmpeg is not available. Please install FFmpeg and ensure it is in your PATH.',
+      );
+    } on ProcessException catch (e, st) {
+      _ffmpegAvailable = false;
+      await _logService.logError(
+        'FFmpeg availability check failed with ProcessException',
+        e,
+        st,
+      );
+      throw Exception(
+        'Failed to execute ffmpeg. Please install FFmpeg and ensure it is in your PATH. Error: $e',
+      );
+    }
   }
 
   Future<List<File>> getAudioFiles(String directoryPath) async {
@@ -166,6 +200,7 @@ class FileService {
     _logService.logInfo(
       'Attempting to convert and copy file from ${sourceFile.path} to $destinationDirectory/$safeFileName with bitrate ${bitrate}k',
     );
+    await _ensureFfmpegAvailable();
     final destDir = Directory(destinationDirectory);
     if (!await destDir.exists()) {
       _logService.logInfo(
