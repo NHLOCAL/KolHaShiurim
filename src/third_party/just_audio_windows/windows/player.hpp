@@ -1,6 +1,10 @@
 #pragma comment(lib, "windowsapp")
 
+#include <functional>
 #include <chrono>
+#include <optional>
+#include <mutex>
+#include <memory>
 
 // This must be included before many other Windows headers.
 #include <windows.h>
@@ -77,6 +81,15 @@ auto TO_WIDESTRING = [](std::string string) -> std::wstring {
   return utf16_string;
 };
 
+// Runs a task on Flutter's platform thread (the thread owning the engine's
+// BinaryMessenger). This is required for platform channel sends on Windows.
+using PlatformTaskRunner = std::function<void(std::function<void()>)>;
+
+struct JustAudioSinkState {
+  std::mutex mutex;
+  std::unique_ptr<flutter::EventSink<>> sink;
+  std::optional<flutter::EncodableValue> last_event;
+};
 
 class JustAudioEventSink {
 public:
@@ -84,36 +97,79 @@ public:
   JustAudioEventSink(JustAudioEventSink const&) = delete;
   JustAudioEventSink& operator=(JustAudioEventSink const&) = delete;
 
-  JustAudioEventSink::JustAudioEventSink(flutter::BinaryMessenger* messenger, const std::string& id) {
+  JustAudioEventSink::JustAudioEventSink(
+    flutter::BinaryMessenger* messenger,
+    const std::string& id,
+    PlatformTaskRunner run_on_platform_thread) :
+    run_on_platform_thread_(std::move(run_on_platform_thread)),
+    state_(std::make_shared<JustAudioSinkState>()) {
     auto event_channel =
       std::make_unique<flutter::EventChannel<flutter::EncodableValue>>(messenger, id, &flutter::StandardMethodCodec::GetInstance());
 
+    auto state = state_;
     auto event_handler = std::make_unique<flutter::StreamHandlerFunctions<>>(
-      [self = this](const EncodableValue* arguments, std::unique_ptr<flutter::EventSink<>>&& events) -> std::unique_ptr<flutter::StreamHandlerError<>> {
-      self->sink = std::move(events);
-      return nullptr;
-    }, [self = this](const EncodableValue* arguments) -> std::unique_ptr<flutter::StreamHandlerError<>> {
-      self->sink.reset();
-      return nullptr;
-    });
+      [state](const EncodableValue* arguments, std::unique_ptr<flutter::EventSink<>>&& events) -> std::unique_ptr<flutter::StreamHandlerError<>> {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        state->sink = std::move(events);
+        // If an event arrived before the stream was listened to, send the most
+        // recent cached event immediately.
+        if (state->sink && state->last_event) {
+          state->sink->Success(*state->last_event);
+        }
+        return nullptr;
+      }, [state](const EncodableValue* arguments) -> std::unique_ptr<flutter::StreamHandlerError<>> {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        state->sink.reset();
+        return nullptr;
+      });
 
     event_channel->SetStreamHandler(std::move(event_handler));
   }
 
   void Success(const EncodableValue& event) {
-    if (sink) {
-      sink->Success(event);
+    auto state = state_;
+    auto event_copy = event;
+    if (run_on_platform_thread_) {
+      run_on_platform_thread_([state, event_copy]() mutable {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        state->last_event = event_copy;
+        if (state->sink) {
+          state->sink->Success(event_copy);
+        }
+      });
+      return;
+    }
+
+    std::lock_guard<std::mutex> lock(state->mutex);
+    state->last_event = event_copy;
+    if (state->sink) {
+      state->sink->Success(event_copy);
     }
   }
 
   void Error(const std::string& error_code,
     const std::string& error_message) {
-    if (sink) {
-      sink->Error(error_code, error_message);
+    auto state = state_;
+    auto code_copy = error_code;
+    auto message_copy = error_message;
+    if (run_on_platform_thread_) {
+      run_on_platform_thread_([state, code_copy, message_copy]() mutable {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        if (state->sink) {
+          state->sink->Error(code_copy, message_copy);
+        }
+      });
+      return;
+    }
+
+    std::lock_guard<std::mutex> lock(state->mutex);
+    if (state->sink) {
+      state->sink->Error(code_copy, message_copy);
     }
   }
 private:
-  std::unique_ptr<flutter::EventSink<>> sink = nullptr;
+  PlatformTaskRunner run_on_platform_thread_;
+  std::shared_ptr<JustAudioSinkState> state_;
 };
 
 class AudioPlayer {
@@ -128,7 +184,19 @@ public:
   std::unique_ptr<JustAudioEventSink> event_sink_ = nullptr;
   std::unique_ptr<JustAudioEventSink> data_sink_ = nullptr;
 
-  AudioPlayer::AudioPlayer(std::string idx, flutter::BinaryMessenger* messenger) {
+  winrt::event_token playback_state_changed_token_{};
+  winrt::event_token media_failed_token_{};
+  winrt::event_token media_opened_token_{};
+  winrt::event_token current_item_changed_token_{};
+  winrt::event_token item_failed_token_{};
+
+  PlatformTaskRunner run_on_platform_thread_;
+
+  AudioPlayer::AudioPlayer(
+    std::string idx,
+    flutter::BinaryMessenger* messenger,
+    PlatformTaskRunner run_on_platform_thread) :
+    run_on_platform_thread_(std::move(run_on_platform_thread)) {
     id = idx;
 
     // Set up channels
@@ -143,17 +211,19 @@ public:
       player->HandleMethodCall(call, std::move(result));
     });
 
-    event_sink_ = std::make_unique<JustAudioEventSink>(messenger, "com.ryanheise.just_audio.events." + idx);
-    data_sink_ = std::make_unique<JustAudioEventSink>(messenger, "com.ryanheise.just_audio.data." + idx);
+    event_sink_ = std::make_unique<JustAudioEventSink>(
+      messenger, "com.ryanheise.just_audio.events." + idx, run_on_platform_thread_);
+    data_sink_ = std::make_unique<JustAudioEventSink>(
+      messenger, "com.ryanheise.just_audio.data." + idx, run_on_platform_thread_);
 
     /// Set up event callbacks
     // Playback event
-    mediaPlayer.PlaybackSession().PlaybackStateChanged([=](auto, const auto& args) -> void {
+    playback_state_changed_token_ = mediaPlayer.PlaybackSession().PlaybackStateChanged([=](auto, const auto& args) -> void {
       broadcastState();
     });
 
     // Player error event
-    mediaPlayer.MediaFailed([=](auto, const Playback::MediaPlayerFailedEventArgs& args) -> void {
+    media_failed_token_ = mediaPlayer.MediaFailed([=](auto, const Playback::MediaPlayerFailedEventArgs& args) -> void {
       std::string errorMessage = winrt::to_string(args.ErrorMessage());
 
       std::cerr << "[just_audio_windows] Media error: " << errorMessage << std::endl;
@@ -180,11 +250,18 @@ public:
       event_sink_->Error(code, errorMessage);
     });
 
-    mediaPlaybackList.MaxPlayedItemsToKeepOpen(2);
-    mediaPlaybackList.CurrentItemChanged([=](auto, const auto& args) -> void {
+    // Fires when the media source has been opened. This is important because
+    // PlaybackStateChanged is not guaranteed to transition out of Opening until
+    // playback starts on all systems.
+    media_opened_token_ = mediaPlayer.MediaOpened([=](auto, const auto& args) -> void {
       broadcastState();
     });
-    mediaPlaybackList.ItemFailed([=](auto, const Playback::MediaPlaybackItemFailedEventArgs& args) -> void {
+
+    mediaPlaybackList.MaxPlayedItemsToKeepOpen(2);
+    current_item_changed_token_ = mediaPlaybackList.CurrentItemChanged([=](auto, const auto& args) -> void {
+      broadcastState();
+    });
+    item_failed_token_ = mediaPlaybackList.ItemFailed([=](auto, const Playback::MediaPlaybackItemFailedEventArgs& args) -> void {
       auto error = winrt::hresult_error(args.Error().ExtendedError());
 
       auto message = winrt::to_string(error.message());
@@ -216,6 +293,31 @@ public:
   }
   AudioPlayer::~AudioPlayer() {
     player_channel_->SetMethodCallHandler(nullptr);
+
+    // Unsubscribe from WinRT callbacks first to avoid firing into a destroyed
+    // player instance after Close().
+    try {
+      mediaPlayer.PlaybackSession().PlaybackStateChanged(
+        playback_state_changed_token_);
+    } catch (...) {
+    }
+    try {
+      mediaPlayer.MediaFailed(media_failed_token_);
+    } catch (...) {
+    }
+    try {
+      mediaPlayer.MediaOpened(media_opened_token_);
+    } catch (...) {
+    }
+    try {
+      mediaPlaybackList.CurrentItemChanged(current_item_changed_token_);
+    } catch (...) {
+    }
+    try {
+      mediaPlaybackList.ItemFailed(item_failed_token_);
+    } catch (...) {
+    }
+
     mediaPlayer.Close();
   }
 
@@ -250,6 +352,10 @@ public:
         seekToPosition(*initialPosition);
       }
 
+      // Ensure Dart receives at least one state update associated with this
+      // load, even if platform callbacks arrive before the EventChannel starts
+      // listening.
+      broadcastState();
       result->Success(flutter::EncodableMap());
     } else if (method_call.method_name().compare("play") == 0) {
       mediaPlayer.Play();

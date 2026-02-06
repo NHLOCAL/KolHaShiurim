@@ -9,6 +9,7 @@
 #include <flutter/plugin_registrar_windows.h>
 #include <flutter/standard_method_codec.h>
 
+#include <functional>
 #include <map>
 #include <memory>
 #include <sstream>
@@ -23,11 +24,97 @@ namespace {
 // static std::unordered_map<std::string, AudioPlayer> players;
 std::vector<std::unique_ptr<AudioPlayer>> players_;
 
+class PlatformThreadTaskRunner {
+ public:
+  PlatformThreadTaskRunner()
+      : platform_thread_id_(GetCurrentThreadId()),
+        dispatch_message_(RegisterWindowMessage(
+            L"JUST_AUDIO_WINDOWS_PLATFORM_THREAD_DISPATCH")) {
+    // Create a message-only window on the platform thread. Posting tasks to
+    // this window avoids relying on Flutter's top-level WndProc delegation and
+    // reduces reentrancy risk (sending platform channel messages from inside
+    // Flutter's own top-level window handler).
+    const HINSTANCE instance = GetModuleHandle(nullptr);
+    const wchar_t* const kClassName = L"JUST_AUDIO_WINDOWS_TASK_WINDOW";
+
+    WNDCLASS window_class{};
+    window_class.lpfnWndProc = PlatformThreadTaskRunner::WndProc;
+    window_class.hInstance = instance;
+    window_class.lpszClassName = kClassName;
+    // Ignore failure if already registered.
+    RegisterClass(&window_class);
+
+    hwnd_ = CreateWindowEx(0, kClassName, L"", 0, 0, 0, 0, 0, HWND_MESSAGE,
+                           nullptr, instance, this);
+    if (!hwnd_ || dispatch_message_ == 0) {
+      std::cerr << "[just_audio_windows] Failed to initialize platform task "
+                   "runner window."
+                << std::endl;
+    }
+  }
+
+  ~PlatformThreadTaskRunner() {
+    if (hwnd_ && IsWindow(hwnd_)) {
+      DestroyWindow(hwnd_);
+    }
+  }
+
+  void Run(std::function<void()> task) {
+    if (!task) {
+      return;
+    }
+    // If already on the platform thread, run immediately.
+    if (GetCurrentThreadId() == platform_thread_id_) {
+      task();
+      return;
+    }
+    if (!hwnd_ || !IsWindow(hwnd_) || dispatch_message_ == 0) {
+      std::cerr << "[just_audio_windows] Dropping platform task (runner not "
+                   "initialized)."
+                << std::endl;
+      return;
+    }
+    auto* heap_task = new std::function<void()>(std::move(task));
+    if (!PostMessage(hwnd_, dispatch_message_, 0,
+                     reinterpret_cast<LPARAM>(heap_task))) {
+      delete heap_task;
+    }
+  }
+
+ private:
+  static LRESULT CALLBACK WndProc(HWND const hwnd,
+                                  UINT const message,
+                                  WPARAM const wparam,
+                                  LPARAM const lparam) noexcept {
+    if (message == WM_NCCREATE) {
+      auto window_struct = reinterpret_cast<CREATESTRUCT*>(lparam);
+      SetWindowLongPtr(hwnd, GWLP_USERDATA,
+                       reinterpret_cast<LONG_PTR>(window_struct->lpCreateParams));
+    }
+
+    auto* self = reinterpret_cast<PlatformThreadTaskRunner*>(
+        GetWindowLongPtr(hwnd, GWLP_USERDATA));
+    if (self && message == self->dispatch_message_) {
+      auto* task = reinterpret_cast<std::function<void()>*>(lparam);
+      if (task) {
+        (*task)();
+        delete task;
+      }
+      return 0;
+    }
+    return DefWindowProc(hwnd, message, wparam, lparam);
+  }
+
+  DWORD platform_thread_id_ = 0;
+  UINT dispatch_message_ = 0;
+  HWND hwnd_ = nullptr;
+};
+
 class JustAudioWindowsPlugin : public flutter::Plugin {
  public:
   static void RegisterWithRegistrar(flutter::PluginRegistrarWindows *registrar);
 
-  JustAudioWindowsPlugin();
+  explicit JustAudioWindowsPlugin(flutter::PluginRegistrarWindows* registrar);
 
   virtual ~JustAudioWindowsPlugin();
 
@@ -43,6 +130,8 @@ class JustAudioWindowsPlugin : public flutter::Plugin {
 
   // Disposes camera by camera id.
   void DisposePlayerByPlayerId(std::string id);
+
+  std::shared_ptr<PlatformThreadTaskRunner> platform_task_runner_;
 };
 
 // static
@@ -53,7 +142,7 @@ void JustAudioWindowsPlugin::RegisterWithRegistrar(
           registrar->messenger(), "com.ryanheise.just_audio.methods",
           &flutter::StandardMethodCodec::GetInstance());
 
-  auto plugin = std::make_unique<JustAudioWindowsPlugin>();
+  auto plugin = std::make_unique<JustAudioWindowsPlugin>(registrar);
 
   channel->SetMethodCallHandler(
       [plugin_pointer = plugin.get(), messenger_pointer = registrar->messenger()](const auto &call, auto result) {
@@ -63,7 +152,9 @@ void JustAudioWindowsPlugin::RegisterWithRegistrar(
   registrar->AddPlugin(std::move(plugin));
 }
 
-JustAudioWindowsPlugin::JustAudioWindowsPlugin() {}
+JustAudioWindowsPlugin::JustAudioWindowsPlugin(
+    flutter::PluginRegistrarWindows* registrar)
+    : platform_task_runner_(std::make_shared<PlatformThreadTaskRunner>()) {}
 
 JustAudioWindowsPlugin::~JustAudioWindowsPlugin() {}
 
@@ -72,13 +163,23 @@ void JustAudioWindowsPlugin::HandleMethodCall(
     std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result,
     flutter::BinaryMessenger* messenger) {
   const auto* args =std::get_if<flutter::EncodableMap>(method_call.arguments());
-  if (args) {
+    if (args) {
     if (method_call.method_name().compare("init") == 0) {
       const auto* id = std::get_if<std::string>(ValueOrNull(*args, "id"));
       if (!id) {
         return result->Error("argument_error", "id argument missing");
       }
-      auto player = std::make_unique<AudioPlayer>(*id, messenger);
+      // Ensure all platform channel messages (EventSink::Success/Error) are
+      // sent from the platform thread to avoid Flutter engine crashes.
+      auto runner = platform_task_runner_;
+      auto player = std::make_unique<AudioPlayer>(
+          *id, messenger, [runner](std::function<void()> task) {
+            if (runner) {
+              runner->Run(std::move(task));
+            } else if (task) {
+              task();
+            }
+          });
       players_.push_back(std::move(player));
       result->Success();
     } else if (method_call.method_name().compare("disposePlayer") == 0) {

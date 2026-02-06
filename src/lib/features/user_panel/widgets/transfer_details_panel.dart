@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -24,6 +25,7 @@ class TransferDetailsPanel extends ConsumerStatefulWidget {
   ConsumerState<TransferDetailsPanel> createState() =>
       _TransferDetailsPanelState();
 }
+
 class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
   UserPermissionInfo? _selectedPermission;
   String? _selectedSpecificPath;
@@ -46,8 +48,13 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
     _logService = ref.read(logServiceProvider);
     _audioPlayer = AudioPlayer();
     _loadSettings();
+    if (widget.selectedFile != null) {
+      // Ensure the preview player is initialized for the initially selected file.
+      unawaited(_handleFileChange());
+    }
     _logService.logInfo('Transfer Details Panel initialized.');
   }
+
   @override
   void didUpdateWidget(covariant TransferDetailsPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -55,6 +62,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       _handleFileChange();
     }
   }
+
   /// Handles the safe transition between audio files to prevent threading errors
   /// on Windows (avoiding race conditions between stop and setFilePath).
   Future<void> _handleFileChange() async {
@@ -82,6 +90,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       );
     }
   }
+
   Future<void> _loadSettings() async {
     _logService.logInfo('Loading app settings for user panel.');
     try {
@@ -96,6 +105,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       _logService.logError('Failed to load app settings for user panel', e, st);
     }
   }
+
   @override
   void dispose() {
     _topicController.dispose();
@@ -103,48 +113,29 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
     super.dispose();
   }
 
+  /// Historically we disposed/recreated the audio player around transfers to
+  /// release file locks. On Windows this pattern can trigger native threading
+  /// issues in the audio plugin during a transfer, potentially crashing the app.
+  ///
+  /// Instead, pause playback and keep the same player instance alive.
   Future<void> _suspendAudioPlayer() async {
     final audioPlayer = _audioPlayer;
     if (audioPlayer == null) {
       return;
     }
-    if (mounted) {
-      setState(() {
-        _audioPlayer = null;
-      });
-    } else {
-      _audioPlayer = null;
-    }
     try {
-      await audioPlayer.stop();
+      await audioPlayer.pause();
     } catch (e, st) {
-      _logService.logError('Failed to stop audio player before transfer', e, st);
-    }
-    try {
-      await audioPlayer.dispose();
-      _logService.logInfo('Audio player disposed before transfer.');
-    } catch (e, st) {
-      _logService.logError('Failed to dispose audio player before transfer', e, st);
+      _logService.logError(
+        'Failed to pause audio player before transfer',
+        e,
+        st,
+      );
     }
   }
 
   Future<void> _restoreAudioPlayer() async {
-    if (!mounted || _audioPlayer != null) {
-      return;
-    }
-    setState(() {
-      _audioPlayer = AudioPlayer();
-    });
-    final audioPlayer = _audioPlayer;
-    if (audioPlayer == null || widget.selectedFile == null) {
-      return;
-    }
-    try {
-      await audioPlayer.setFilePath(widget.selectedFile!.path);
-      _logService.logInfo('Audio player restored after transfer.');
-    } catch (e, st) {
-      _logService.logError('Failed to restore audio player after transfer', e, st);
-    }
+    // No-op: we keep the same player instance alive to avoid plugin churn.
   }
   void _resetForm() {
     _logService.logInfo('Resetting transfer form.');
@@ -156,6 +147,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       _pendingSeekMillis = null;
     });
   }
+
   String _getNewFileName(UserPermissionInfo? permission) {
     if (permission == null || widget.selectedFile == null) {
       return 'שם קובץ...';
@@ -178,6 +170,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
     _logService.logInfo('Generated new file name preview: $safeFileName');
     return safeFileName;
   }
+
   Future<String> _determineFinalFileName({
     required UserPermissionInfo permission,
     required String? specificPath,
@@ -246,6 +239,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
     _logService.logInfo('Determined final file name: $safeFileName');
     return safeFileName;
   }
+
   Future<void> _showPostCopyOptionsDialog(
     File sourceFile,
     String newFileName,
@@ -333,18 +327,17 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
     ref.read(lastCopiedFileNameProvider.notifier).state = null;
     widget.onCopyComplete();
   }
+
   Future<void> _copyFile() async {
-    if (widget.selectedFile == null ||
-        _appSettings == null) {
+    if (widget.selectedFile == null || _appSettings == null) {
       _logService.logWarning(
         'Attempted to copy file with missing selections (file, permission, or settings).',
       );
       return;
     }
-    final permissions = ref.read(allowedRabbisProvider).maybeWhen(
-          data: (data) => data,
-          orElse: () => <UserPermissionInfo>[],
-        );
+    final permissions = ref
+        .read(allowedRabbisProvider)
+        .maybeWhen(data: (data) => data, orElse: () => <UserPermissionInfo>[]);
     final resolvedSelection = resolvePermissionSelection(
       selectedPermission: _selectedPermission,
       selectedSpecificPath: _selectedSpecificPath,
@@ -403,18 +396,10 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
     );
     try {
       final fileSize = await sourceFile.length();
-      _logService.logInfo(
-        'Source file size: $fileSize bytes.',
-      );
+      _logService.logInfo('Source file size: $fileSize bytes.');
     } catch (e, st) {
-      _logService.logWarning(
-        'Failed to read source file size: $e',
-      );
-      _logService.logError(
-        'Error reading source file size.',
-        e,
-        st,
-      );
+      _logService.logWarning('Failed to read source file size: $e');
+      _logService.logError('Error reading source file size.', e, st);
     }
     try {
       final newFileName = await _determineFinalFileName(
@@ -475,11 +460,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
         if (!mounted) return;
         await _showPostCopyOptionsDialog(sourceFile, newFileName);
       } catch (e, st) {
-        _logService.logError(
-          'Failed to show post-copy dialog.',
-          e,
-          st,
-        );
+        _logService.logError('Failed to show post-copy dialog.', e, st);
       }
     } catch (e, st) {
       _logService.logError(
@@ -500,6 +481,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       await _restoreAudioPlayer();
     }
   }
+
   Future<void> _pickHebrewDate() async {
     _logService.logUserActivity(
       'User opened Hebrew date picker. Current date: ${_selectedDate.toString()}',
@@ -530,6 +512,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       _logService.logInfo('Hebrew date picker cancelled.');
     }
   }
+
   Widget _buildHebrewKeyboard(Color buttonColor, Color textColor) {
     final buttonStyle = ElevatedButton.styleFrom(
       backgroundColor: buttonColor,
@@ -624,6 +607,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       ],
     );
   }
+
   Widget _buildAudioPlayer() {
     final audioPlayer = _audioPlayer;
     if (audioPlayer == null) {
@@ -635,6 +619,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
       return "$minutes:$seconds";
     }
+
     return Card(
       clipBehavior: Clip.antiAlias,
       elevation: 2,
@@ -695,20 +680,19 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
                         Expanded(
                           child: Slider(
                             activeColor: Theme.of(context).colorScheme.primary,
-                            inactiveColor: Theme.of(context)
-                                .colorScheme
-                                .onSurface
-                                .withAlpha(77),
-                            value: (_pendingSeekMillis ??
-                                    position.inMilliseconds.toDouble())
-                                .clamp(
-                                  0,
-                                  duration.inMilliseconds.toDouble(),
-                                ),
+                            inactiveColor: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withAlpha(77),
+                            value:
+                                (_pendingSeekMillis ??
+                                        position.inMilliseconds.toDouble())
+                                    .clamp(
+                                      0,
+                                      duration.inMilliseconds.toDouble(),
+                                    ),
                             max: duration.inMilliseconds.toDouble(),
-                            onChanged: (value) => setState(
-                              () => _pendingSeekMillis = value,
-                            ),
+                            onChanged: (value) =>
+                                setState(() => _pendingSeekMillis = value),
                             onChangeEnd: (value) {
                               audioPlayer.seek(
                                 Duration(milliseconds: value.round()),
@@ -738,12 +722,12 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
                                 SizedBox(
                                   width: 100,
                                   child: Slider(
-                                    activeColor:
-                                        Theme.of(context).colorScheme.secondary,
-                                    inactiveColor: Theme.of(context)
-                                        .colorScheme
-                                        .onSurface
-                                        .withAlpha(77),
+                                    activeColor: Theme.of(
+                                      context,
+                                    ).colorScheme.secondary,
+                                    inactiveColor: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurface.withAlpha(77),
                                     value: snapshot.data ?? 1.0,
                                     onChanged: audioPlayer.setVolume,
                                   ),
@@ -763,6 +747,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       ),
     );
   }
+
   @override
   Widget build(BuildContext context) {
     final allowedRabbisAsync = ref.watch(allowedRabbisProvider);
@@ -794,6 +779,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       ),
     );
   }
+
   Widget _buildFormContent(
     ThemeData theme,
     AsyncValue<List<UserPermissionInfo>> allowedRabbisAsync,
@@ -848,7 +834,8 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
               ),
       );
     }
-    final permissions = allowedRabbisAsync.value ?? const <UserPermissionInfo>[];
+    final permissions =
+        allowedRabbisAsync.value ?? const <UserPermissionInfo>[];
     final resolvedSelection = resolvePermissionSelection(
       selectedPermission: _selectedPermission,
       selectedSpecificPath: _selectedSpecificPath,

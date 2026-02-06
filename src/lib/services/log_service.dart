@@ -11,6 +11,7 @@ class LogService {
   static const String _logFileName = 'app_log.txt'; // שם קובץ הלוג
   static const String _logDirectoryName =
       'logs'; // תיקיית הלוג בתוך תיקיית התמיכה של האפליקציה
+  Future<void> _writeQueue = Future.value();
 
   // Debug-only console logging (avoids printing in release builds).
   void _debugLog(String message) {
@@ -40,7 +41,7 @@ class LogService {
   }
 
   // פונקציה פנימית לכתיבת הודעה לקובץ הלוג
-  Future<void> _writeLog(LogLevel level, String message) async {
+  Future<void> _writeLogUnlocked(LogLevel level, String message) async {
     try {
       // וודא שקובץ הלוג קיים לפני כתיבה אליו
       if (!await _logFile.exists()) {
@@ -63,6 +64,16 @@ class LogService {
         'ERROR: Failed to write to log file: $e. Message: [$level.name] $message',
       );
     }
+  }
+
+  // Serialize writes so log entries don't interleave/corrupt when callers don't await.
+  Future<void> _writeLog(LogLevel level, String message) {
+    _writeQueue = _writeQueue.then((_) => _writeLogUnlocked(level, message));
+    // Ensure one failed write doesn't permanently break the queue chain.
+    _writeQueue = _writeQueue.catchError((e, st) {
+      _debugLog('ERROR: Log write queue error: $e\n$st');
+    });
+    return _writeQueue;
   }
 
   // פונקציות ציבוריות לכתיבת לוגים ברמות שונות
@@ -93,4 +104,3 @@ class LogService {
     await _writeLog(LogLevel.error, fullMessage);
   }
 }
-
