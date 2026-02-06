@@ -48,7 +48,9 @@ class WindowActions {
     if (!Platform.isWindows) {
       try {
         await windowManager.setMovable(true);
-      } on MissingPluginException {}
+      } on MissingPluginException {
+        // Plugin not available on this platform/runtime.
+      }
     }
 
     await windowManager.setTitleBarStyle(TitleBarStyle.normal);
@@ -64,7 +66,9 @@ class WindowActions {
     if (!Platform.isWindows) {
       try {
         await windowManager.setMovable(false);
-      } on MissingPluginException {}
+      } on MissingPluginException {
+        // Plugin not available on this platform/runtime.
+      }
     }
 
     await windowManager.setTitleBarStyle(TitleBarStyle.hidden);

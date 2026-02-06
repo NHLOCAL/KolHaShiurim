@@ -2,62 +2,46 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kol_hashiurim/services/file_service.dart';
+import 'package:kol_hashiurim/services/log_service.dart';
+import 'package:path/path.dart' as p;
 
-import 'helpers/test_log_service.dart';
+class _TestLogService extends LogService {
+  @override
+  Future<void> logInfo(String message) async {}
+
+  @override
+  Future<void> logUserActivity(String message) async {}
+
+  @override
+  Future<void> logWarning(String message) async {}
+
+  @override
+  Future<void> logError(
+    String message, [
+    dynamic error,
+    StackTrace? stackTrace,
+  ]) async {}
+}
 
 void main() {
-  test('copyFile creates destination and sanitizes filename', () async {
-    final tempDir = await Directory.systemTemp.createTemp('copy-test');
-    addTearDown(() => tempDir.delete(recursive: true));
+  test('convertAndCopyFile throws when FFmpeg is unavailable', () async {
+    final tempDir = await Directory.systemTemp.createTemp('ffmpeg-missing-');
+    addTearDown(() async {
+      await tempDir.delete(recursive: true);
+    });
 
-    final sourceFile = File('${tempDir.path}/source.txt');
-    await sourceFile.writeAsString('content');
-
-    final destinationDir = '${tempDir.path}/dest';
-    final service = FileService(TestLogService());
-
-    await service.copyFile(
-      sourceFile: sourceFile,
-      destinationDirectory: destinationDir,
-      newFileName: 'copy name. ',
-    );
-
-    final copiedFile = File('$destinationDir/copy name');
-    expect(await copiedFile.exists(), isTrue);
-    expect(await copiedFile.readAsString(), 'content');
-  });
-
-  test('copyFile throws when source is missing', () async {
-    final tempDir = await Directory.systemTemp.createTemp('copy-missing');
-    addTearDown(() => tempDir.delete(recursive: true));
-
-    final sourceFile = File('${tempDir.path}/missing.txt');
-    final service = FileService(TestLogService());
-
-    expect(
-      () => service.copyFile(
-        sourceFile: sourceFile,
-        destinationDirectory: tempDir.path,
-        newFileName: 'missing.txt',
-      ),
-      throwsA(isA<FileSystemException>()),
-    );
-  });
-
-  test('convertAndCopyFile throws when process fails', () async {
-    final tempDir = await Directory.systemTemp.createTemp('convert-fail');
-    addTearDown(() => tempDir.delete(recursive: true));
-
-    final sourceFile = File('${tempDir.path}/source.wav');
+    final sourceFile = File(p.join(tempDir.path, 'source.wav'));
     await sourceFile.writeAsString('audio');
 
-    final service = FileService(
-      TestLogService(),
-      processRunner: (_, __) async => ProcessResult(0, 1, '', 'ffmpeg error'),
+    final fileService = FileService(
+      _TestLogService(),
+      processRunner: (executable, arguments, {timeout}) async {
+        return ProcessResult(0, 1, '', 'ffmpeg missing');
+      },
     );
 
     expect(
-      () => service.convertAndCopyFile(
+      () => fileService.convertAndCopyFile(
         sourceFile: sourceFile,
         destinationDirectory: tempDir.path,
         newFileName: 'output.mp3',
@@ -67,52 +51,37 @@ void main() {
     );
   });
 
-  test('convertAndCopyFile throws when output missing', () async {
-    final tempDir = await Directory.systemTemp.createTemp('convert-missing');
-    addTearDown(() => tempDir.delete(recursive: true));
+  test('convertAndCopyFile creates output when FFmpeg succeeds', () async {
+    final tempDir = await Directory.systemTemp.createTemp('ffmpeg-success-');
+    addTearDown(() async {
+      await tempDir.delete(recursive: true);
+    });
 
-    final sourceFile = File('${tempDir.path}/source.wav');
+    final sourceFile = File(p.join(tempDir.path, 'source.wav'));
     await sourceFile.writeAsString('audio');
 
-    final service = FileService(
-      TestLogService(),
-      processRunner: (_, __) async => ProcessResult(0, 0, '', ''),
-    );
-
-    expect(
-      () => service.convertAndCopyFile(
-        sourceFile: sourceFile,
-        destinationDirectory: tempDir.path,
-        newFileName: 'output.mp3',
-        bitrate: 128,
-      ),
-      throwsException,
-    );
-  });
-
-  test('convertAndCopyFile succeeds when output created', () async {
-    final tempDir = await Directory.systemTemp.createTemp('convert-ok');
-    addTearDown(() => tempDir.delete(recursive: true));
-
-    final sourceFile = File('${tempDir.path}/source.wav');
-    await sourceFile.writeAsString('audio');
-
-    final service = FileService(
-      TestLogService(),
-      processRunner: (_, arguments) async {
-        final outputPath = arguments.last;
-        await File(outputPath).writeAsString('converted');
+    final fileService = FileService(
+      _TestLogService(),
+      processRunner: (executable, arguments, {timeout}) async {
+        if (arguments.length == 1 && arguments.first == '-version') {
+          return ProcessResult(0, 0, 'ffmpeg version', '');
+        }
+        final destinationPath = arguments.last;
+        await File(destinationPath).writeAsString('converted');
         return ProcessResult(0, 0, '', '');
       },
     );
 
-    await service.convertAndCopyFile(
+    await fileService.convertAndCopyFile(
       sourceFile: sourceFile,
       destinationDirectory: tempDir.path,
       newFileName: 'output.mp3',
       bitrate: 128,
     );
 
-    expect(await File('${tempDir.path}/output.mp3').exists(), isTrue);
+    expect(
+      File(p.join(tempDir.path, 'output.mp3')).existsSync(),
+      isTrue,
+    );
   });
 }

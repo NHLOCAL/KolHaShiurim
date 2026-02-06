@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +9,7 @@ import 'package:path/path.dart' as p;
 import 'package:kol_hashiurim/core/database/database.dart';
 import 'package:kol_hashiurim/core/providers/providers.dart';
 import 'package:kol_hashiurim/features/user_panel/providers/user_panel_providers.dart';
+import 'package:kol_hashiurim/features/user_panel/utils/permission_selection.dart';
 import 'package:kol_hashiurim/services/log_service.dart';
 import 'package:kol_hashiurim/utils/file_name_sanitizer.dart';
 
@@ -23,6 +25,7 @@ class TransferDetailsPanel extends ConsumerStatefulWidget {
   ConsumerState<TransferDetailsPanel> createState() =>
       _TransferDetailsPanelState();
 }
+
 class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
   UserPermissionInfo? _selectedPermission;
   String? _selectedSpecificPath;
@@ -45,8 +48,13 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
     _logService = ref.read(logServiceProvider);
     _audioPlayer = AudioPlayer();
     _loadSettings();
+    if (widget.selectedFile != null) {
+      // Ensure the preview player is initialized for the initially selected file.
+      unawaited(_handleFileChange());
+    }
     _logService.logInfo('Transfer Details Panel initialized.');
   }
+
   @override
   void didUpdateWidget(covariant TransferDetailsPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -54,6 +62,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       _handleFileChange();
     }
   }
+
   /// Handles the safe transition between audio files to prevent threading errors
   /// on Windows (avoiding race conditions between stop and setFilePath).
   Future<void> _handleFileChange() async {
@@ -81,6 +90,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       );
     }
   }
+
   Future<void> _loadSettings() async {
     _logService.logInfo('Loading app settings for user panel.');
     try {
@@ -95,6 +105,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       _logService.logError('Failed to load app settings for user panel', e, st);
     }
   }
+
   @override
   void dispose() {
     _topicController.dispose();
@@ -102,48 +113,29 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
     super.dispose();
   }
 
+  /// Historically we disposed/recreated the audio player around transfers to
+  /// release file locks. On Windows this pattern can trigger native threading
+  /// issues in the audio plugin during a transfer, potentially crashing the app.
+  ///
+  /// Instead, pause playback and keep the same player instance alive.
   Future<void> _suspendAudioPlayer() async {
     final audioPlayer = _audioPlayer;
     if (audioPlayer == null) {
       return;
     }
-    if (mounted) {
-      setState(() {
-        _audioPlayer = null;
-      });
-    } else {
-      _audioPlayer = null;
-    }
     try {
-      await audioPlayer.stop();
+      await audioPlayer.pause();
     } catch (e, st) {
-      _logService.logError('Failed to stop audio player before transfer', e, st);
-    }
-    try {
-      await audioPlayer.dispose();
-      _logService.logInfo('Audio player disposed before transfer.');
-    } catch (e, st) {
-      _logService.logError('Failed to dispose audio player before transfer', e, st);
+      _logService.logError(
+        'Failed to pause audio player before transfer',
+        e,
+        st,
+      );
     }
   }
 
   Future<void> _restoreAudioPlayer() async {
-    if (!mounted || _audioPlayer != null) {
-      return;
-    }
-    setState(() {
-      _audioPlayer = AudioPlayer();
-    });
-    final audioPlayer = _audioPlayer;
-    if (audioPlayer == null || widget.selectedFile == null) {
-      return;
-    }
-    try {
-      await audioPlayer.setFilePath(widget.selectedFile!.path);
-      _logService.logInfo('Audio player restored after transfer.');
-    } catch (e, st) {
-      _logService.logError('Failed to restore audio player after transfer', e, st);
-    }
+    // No-op: we keep the same player instance alive to avoid plugin churn.
   }
   void _resetForm() {
     _logService.logInfo('Resetting transfer form.');
@@ -155,8 +147,9 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       _pendingSeekMillis = null;
     });
   }
-  String _getNewFileName() {
-    if (_selectedPermission == null || widget.selectedFile == null) {
+
+  String _getNewFileName(UserPermissionInfo? permission) {
+    if (permission == null || widget.selectedFile == null) {
       return 'שם קובץ...';
     }
     final formatter = HebrewDateFormatter()
@@ -169,7 +162,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
         ? '.mp3'
         : p.extension(widget.selectedFile!.path);
     final fileName =
-        'XX - $dateStr - ${_selectedPermission!.rabbi.name}${sanitizedTopic.isNotEmpty ? ' - $sanitizedTopic' : ''}$extension';
+        'XX - $dateStr - ${permission.rabbi.name}${sanitizedTopic.isNotEmpty ? ' - $sanitizedTopic' : ''}$extension';
     final safeFileName = sanitizeFileName(
       fileName,
       fallback: 'שיעור$extension',
@@ -177,8 +170,12 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
     _logService.logInfo('Generated new file name preview: $safeFileName');
     return safeFileName;
   }
-  Future<String> _determineFinalFileName() async {
-    if (_selectedPermission == null || widget.selectedFile == null) {
+
+  Future<String> _determineFinalFileName({
+    required UserPermissionInfo permission,
+    required String? specificPath,
+  }) async {
+    if (widget.selectedFile == null) {
       _logService.logError(
         "Cannot determine final filename, selection is incomplete.",
         null,
@@ -195,11 +192,11 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
     final extension = (_appSettings?.convertToMp3 ?? false)
         ? '.mp3'
         : p.extension(widget.selectedFile!.path);
-    final rabbiName = _selectedPermission!.rabbi.name;
-    final baseDirectory = _selectedPermission!.rabbi.targetPath;
+    final rabbiName = permission.rabbi.name;
+    final baseDirectory = permission.rabbi.targetPath;
     final destinationDirectory =
-        (_selectedSpecificPath != null && _selectedSpecificPath!.isNotEmpty)
-        ? p.join(baseDirectory, _selectedSpecificPath!)
+        (specificPath != null && specificPath.isNotEmpty)
+        ? p.join(baseDirectory, specificPath)
         : baseDirectory;
     int nextNumber = 1;
     try {
@@ -242,6 +239,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
     _logService.logInfo('Determined final file name: $safeFileName');
     return safeFileName;
   }
+
   Future<void> _showPostCopyOptionsDialog(
     File sourceFile,
     String newFileName,
@@ -329,20 +327,60 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
     ref.read(lastCopiedFileNameProvider.notifier).state = null;
     widget.onCopyComplete();
   }
+
   Future<void> _copyFile() async {
-    if (widget.selectedFile == null ||
-        _selectedPermission == null ||
-        _appSettings == null) {
+    if (widget.selectedFile == null || _appSettings == null) {
       _logService.logWarning(
         'Attempted to copy file with missing selections (file, permission, or settings).',
       );
       return;
     }
-    if (_selectedPermission!.specificPaths.length > 1 &&
-        _selectedSpecificPath == null) {
+    final permissions = ref
+        .read(allowedRabbisProvider)
+        .maybeWhen(data: (data) => data, orElse: () => <UserPermissionInfo>[]);
+    final resolvedSelection = resolvePermissionSelection(
+      selectedPermission: _selectedPermission,
+      selectedSpecificPath: _selectedSpecificPath,
+      availablePermissions: permissions,
+    );
+    if (resolvedSelection.permission == null) {
+      _logService.logWarning(
+        'Attempted to copy file without a valid permission selection.',
+      );
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
+          content: Text('יש לבחור רב יעד להעברה'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    if (mounted &&
+        (resolvedSelection.permission != _selectedPermission ||
+            resolvedSelection.specificPath != _selectedSpecificPath)) {
+      setState(() {
+        _selectedPermission = resolvedSelection.permission;
+        _selectedSpecificPath = resolvedSelection.specificPath;
+      });
+    }
+    if (resolvedSelection.isPathSelectionRequired &&
+        resolvedSelection.specificPath == null) {
+      final scaffoldMessenger = ScaffoldMessenger.of(context);
+      scaffoldMessenger.showSnackBar(
+        const SnackBar(
           content: Text('יש לבחור תיקיית משנה ליעד'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final selectedPermission = resolvedSelection.permission;
+    final selectedSpecificPath = resolvedSelection.specificPath;
+    if (selectedPermission == null) {
+      scaffoldMessenger.showSnackBar(
+        const SnackBar(
+          content: Text('יש לבחור רב יעד להעברה'),
           backgroundColor: Colors.orange,
         ),
       );
@@ -351,7 +389,6 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
     await _suspendAudioPlayer();
     setState(() => _isCopying = true);
     ref.read(lastCopiedFileNameProvider.notifier).state = null;
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
     final authState = ref.read(authStateProvider);
     final sourceFile = widget.selectedFile!;
     _logService.logUserActivity(
@@ -359,25 +396,20 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
     );
     try {
       final fileSize = await sourceFile.length();
-      _logService.logInfo(
-        'Source file size: $fileSize bytes.',
-      );
+      _logService.logInfo('Source file size: $fileSize bytes.');
     } catch (e, st) {
-      _logService.logWarning(
-        'Failed to read source file size: $e',
-      );
-      _logService.logError(
-        'Error reading source file size.',
-        e,
-        st,
-      );
+      _logService.logWarning('Failed to read source file size: $e');
+      _logService.logError('Error reading source file size.', e, st);
     }
     try {
-      final newFileName = await _determineFinalFileName();
-      final baseDirectory = _selectedPermission!.rabbi.targetPath;
+      final newFileName = await _determineFinalFileName(
+        permission: selectedPermission,
+        specificPath: selectedSpecificPath,
+      );
+      final baseDirectory = selectedPermission.rabbi.targetPath;
       final destinationDirectory =
-          (_selectedSpecificPath != null && _selectedSpecificPath!.isNotEmpty)
-          ? p.join(baseDirectory, _selectedSpecificPath!)
+          (selectedSpecificPath != null && selectedSpecificPath.isNotEmpty)
+          ? p.join(baseDirectory, selectedSpecificPath)
           : baseDirectory;
       final destinationPath = p.join(destinationDirectory, newFileName);
       final fileService = ref.read(fileServiceProvider);
@@ -385,7 +417,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
         'Copying/converting file from ${sourceFile.path} to $destinationPath (Convert to MP3: ${_appSettings!.convertToMp3})',
       );
       _logService.logInfo(
-        'User target details: rabbi="${_selectedPermission!.rabbi.name}", base="$baseDirectory", specific="${_selectedSpecificPath ?? ''}".',
+        'User target details: rabbi="${selectedPermission.rabbi.name}", base="$baseDirectory", specific="${selectedSpecificPath ?? ''}".',
       );
       if (_appSettings!.convertToMp3) {
         await fileService.convertAndCopyFile(
@@ -425,13 +457,10 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       );
       _logService.logInfo('File transfer successful: $newFileName');
       try {
+        if (!mounted) return;
         await _showPostCopyOptionsDialog(sourceFile, newFileName);
       } catch (e, st) {
-        _logService.logError(
-          'Failed to show post-copy dialog.',
-          e,
-          st,
-        );
+        _logService.logError('Failed to show post-copy dialog.', e, st);
       }
     } catch (e, st) {
       _logService.logError(
@@ -452,6 +481,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       await _restoreAudioPlayer();
     }
   }
+
   Future<void> _pickHebrewDate() async {
     _logService.logUserActivity(
       'User opened Hebrew date picker. Current date: ${_selectedDate.toString()}',
@@ -482,6 +512,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       _logService.logInfo('Hebrew date picker cancelled.');
     }
   }
+
   Widget _buildHebrewKeyboard(Color buttonColor, Color textColor) {
     final buttonStyle = ElevatedButton.styleFrom(
       backgroundColor: buttonColor,
@@ -576,6 +607,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       ],
     );
   }
+
   Widget _buildAudioPlayer() {
     final audioPlayer = _audioPlayer;
     if (audioPlayer == null) {
@@ -587,6 +619,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
       return "$minutes:$seconds";
     }
+
     return Card(
       clipBehavior: Clip.antiAlias,
       elevation: 2,
@@ -647,20 +680,19 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
                         Expanded(
                           child: Slider(
                             activeColor: Theme.of(context).colorScheme.primary,
-                            inactiveColor: Theme.of(context)
-                                .colorScheme
-                                .onSurface
-                                .withOpacity(0.3),
-                            value: (_pendingSeekMillis ??
-                                    position.inMilliseconds.toDouble())
-                                .clamp(
-                                  0,
-                                  duration.inMilliseconds.toDouble(),
-                                ),
+                            inactiveColor: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withAlpha(77),
+                            value:
+                                (_pendingSeekMillis ??
+                                        position.inMilliseconds.toDouble())
+                                    .clamp(
+                                      0,
+                                      duration.inMilliseconds.toDouble(),
+                                    ),
                             max: duration.inMilliseconds.toDouble(),
-                            onChanged: (value) => setState(
-                              () => _pendingSeekMillis = value,
-                            ),
+                            onChanged: (value) =>
+                                setState(() => _pendingSeekMillis = value),
                             onChangeEnd: (value) {
                               audioPlayer.seek(
                                 Duration(milliseconds: value.round()),
@@ -690,12 +722,12 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
                                 SizedBox(
                                   width: 100,
                                   child: Slider(
-                                    activeColor:
-                                        Theme.of(context).colorScheme.secondary,
-                                    inactiveColor: Theme.of(context)
-                                        .colorScheme
-                                        .onSurface
-                                        .withOpacity(0.3),
+                                    activeColor: Theme.of(
+                                      context,
+                                    ).colorScheme.secondary,
+                                    inactiveColor: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurface.withAlpha(77),
                                     value: snapshot.data ?? 1.0,
                                     onChanged: audioPlayer.setVolume,
                                   ),
@@ -715,6 +747,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       ),
     );
   }
+
   @override
   Widget build(BuildContext context) {
     final allowedRabbisAsync = ref.watch(allowedRabbisProvider);
@@ -746,6 +779,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       ),
     );
   }
+
   Widget _buildFormContent(
     ThemeData theme,
     AsyncValue<List<UserPermissionInfo>> allowedRabbisAsync,
@@ -800,9 +834,27 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
               ),
       );
     }
-    bool showPathSelector =
-        _selectedPermission != null &&
-        _selectedPermission!.specificPaths.length > 1;
+    final permissions =
+        allowedRabbisAsync.value ?? const <UserPermissionInfo>[];
+    final resolvedSelection = resolvePermissionSelection(
+      selectedPermission: _selectedPermission,
+      selectedSpecificPath: _selectedSpecificPath,
+      availablePermissions: permissions,
+    );
+    if (mounted &&
+        (resolvedSelection.permission != _selectedPermission ||
+            resolvedSelection.specificPath != _selectedSpecificPath)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _selectedPermission = resolvedSelection.permission;
+          _selectedSpecificPath = resolvedSelection.specificPath;
+        });
+      });
+    }
+    final showPathSelector = resolvedSelection.isPathSelectionRequired;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -825,7 +877,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
                 allowedRabbisAsync.when(
                   data: (permissions) =>
                       DropdownButtonFormField<UserPermissionInfo>(
-                        value: _selectedPermission,
+                        initialValue: resolvedSelection.permission,
                         items: permissions
                             .map(
                               (p) => DropdownMenuItem(
@@ -870,8 +922,8 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
                 if (showPathSelector) ...[
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String?>(
-                    value: _selectedSpecificPath,
-                    items: _selectedPermission!.specificPaths
+                    initialValue: resolvedSelection.specificPath,
+                    items: resolvedSelection.permission!.specificPaths
                         .map(
                           (path) => DropdownMenuItem(
                             value: path,
@@ -921,7 +973,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
                 Text('שם קובץ היעד:', style: theme.textTheme.titleMedium),
                 const SizedBox(height: 4),
                 SelectableText(
-                  _getNewFileName(),
+                  _getNewFileName(resolvedSelection.permission),
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: theme.colorScheme.secondary,
                   ),
@@ -953,7 +1005,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
               fontWeight: FontWeight.bold,
             ),
           ),
-          onPressed: _selectedPermission == null ? null : _copyFile,
+          onPressed: resolvedSelection.permission == null ? null : _copyFile,
         ),
       ],
     );

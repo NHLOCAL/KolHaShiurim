@@ -622,21 +622,19 @@ class _PermissionsDialogState extends ConsumerState<_PermissionsDialog> {
                     _logService.logUserActivity(
                       'Admin set permissions for user ${widget.user.name} (ID: ${widget.user.id}). Permissions: $permissionsToSet',
                     );
-                    if (mounted) {
-                      Navigator.of(context).pop();
-                    }
+                    if (!context.mounted) return;
+                    Navigator.of(context).pop();
                   } catch (e, st) {
                     _logService.logError(
                       'Failed to set permissions for user: ${widget.user.name}',
                       e,
                       st,
                     );
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('שגיאה בשמירת הרשאות: $e')),
-                      );
-                      setState(() => _isLoading = false);
-                    }
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('שגיאה בשמירת הרשאות: $e')),
+                    );
+                    setState(() => _isLoading = false);
                   }
                 },
           child: const Text('שמור'),

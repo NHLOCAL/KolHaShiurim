@@ -204,7 +204,7 @@ class _LicenseScreenState extends ConsumerState<LicenseScreen> {
       elevation: 0,
       color: Theme.of(
         context,
-      ).colorScheme.surfaceContainerHighest.withOpacity(0.5),
+      ).colorScheme.surfaceContainerHighest.withAlpha(128),
       child: Padding(
         padding: const EdgeInsets.all(12.0),
         child: Column(
