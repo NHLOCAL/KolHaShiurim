@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
+import 'package:flutter/foundation.dart';
 
 // רמות לוג שונות
 enum LogLevel { info, userActivity, warning, error }
@@ -10,6 +11,15 @@ class LogService {
   static const String _logFileName = 'app_log.txt'; // שם קובץ הלוג
   static const String _logDirectoryName =
       'logs'; // תיקיית הלוג בתוך תיקיית התמיכה של האפליקציה
+
+  // Debug-only console logging (avoids printing in release builds).
+  void _debugLog(String message) {
+    assert(() {
+      debugPrint(message);
+      return true;
+    }());
+  }
+
   // אתחול שירות הלוג
   Future<void> init() async {
     try {
@@ -22,10 +32,10 @@ class LogService {
       }
       _logFile = File(p.join(logDir.path, _logFileName));
       // הדפסת נתיב הלוג לקונסול לפיתוח ודיבוג
-      print('Log file path: ${_logFile.path}');
+      _debugLog('Log file path: ${_logFile.path}');
     } catch (e, st) {
       // אם האתחול נכשל, הדפס שגיאה לקונסול
-      print('Failed to initialize LogService: $e\n$st');
+      _debugLog('Failed to initialize LogService: $e\n$st');
     }
   }
 
@@ -49,7 +59,7 @@ class LogService {
       );
     } catch (e) {
       // אם הכתיבה לקובץ נכשלת, הדפס שגיאה לקונסול
-      print(
+      _debugLog(
         'ERROR: Failed to write to log file: $e. Message: [$level.name] $message',
       );
     }

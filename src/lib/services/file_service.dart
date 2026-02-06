@@ -17,12 +17,21 @@ class FileService {
   final Duration _ffmpegCheckTimeout;
   final Duration _ffmpegConversionTimeout;
 
+  static Future<ProcessResult> _runProcess(
+    String executable,
+    List<String> arguments, {
+    Duration? timeout,
+  }) {
+    final future = Process.run(executable, arguments);
+    return timeout == null ? future : future.timeout(timeout);
+  }
+
   FileService(
     this._logService, {
     ProcessRunner? processRunner,
     Duration ffmpegCheckTimeout = const Duration(seconds: 5),
     Duration ffmpegConversionTimeout = const Duration(minutes: 10),
-  })  : _processRunner = processRunner ?? Process.run,
+  })  : _processRunner = processRunner ?? _runProcess,
         _ffmpegCheckTimeout = ffmpegCheckTimeout,
         _ffmpegConversionTimeout = ffmpegConversionTimeout;
 

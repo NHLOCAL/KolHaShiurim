@@ -291,7 +291,7 @@ class SettingsTab extends ConsumerWidget {
                         child: IgnorePointer(
                           ignoring: !settings.convertToMp3,
                           child: DropdownButtonFormField<int>(
-                            value: settings.mp3Bitrate,
+                            initialValue: settings.mp3Bitrate,
                             decoration: const InputDecoration(
                               labelText: 'איכות (Bitrate)',
                               border: OutlineInputBorder(),

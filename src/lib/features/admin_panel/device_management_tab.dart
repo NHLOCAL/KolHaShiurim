@@ -479,7 +479,7 @@ class __DeviceDialogState extends ConsumerState<_DeviceDialog> {
               const SizedBox(height: 16),
               usersAsync.when(
                 data: (users) => DropdownButtonFormField<int>(
-                  value: _selectedUserId,
+                  initialValue: _selectedUserId,
                   hint: const Text('בחר משתמש לשיוך'),
                   decoration: const InputDecoration(
                     border: OutlineInputBorder(),

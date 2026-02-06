@@ -372,9 +372,22 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
     }
     if (resolvedSelection.isPathSelectionRequired &&
         resolvedSelection.specificPath == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      final scaffoldMessenger = ScaffoldMessenger.of(context);
+      scaffoldMessenger.showSnackBar(
         const SnackBar(
           content: Text('יש לבחור תיקיית משנה ליעד'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final selectedPermission = resolvedSelection.permission;
+    final selectedSpecificPath = resolvedSelection.specificPath;
+    if (selectedPermission == null) {
+      scaffoldMessenger.showSnackBar(
+        const SnackBar(
+          content: Text('יש לבחור רב יעד להעברה'),
           backgroundColor: Colors.orange,
         ),
       );
@@ -383,11 +396,8 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
     await _suspendAudioPlayer();
     setState(() => _isCopying = true);
     ref.read(lastCopiedFileNameProvider.notifier).state = null;
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
     final authState = ref.read(authStateProvider);
     final sourceFile = widget.selectedFile!;
-    final selectedPermission = resolvedSelection.permission;
-    final selectedSpecificPath = resolvedSelection.specificPath;
     _logService.logUserActivity(
       'User initiating file transfer for: ${sourceFile.path}',
     );
@@ -408,10 +418,10 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
     }
     try {
       final newFileName = await _determineFinalFileName(
-        permission: selectedPermission!,
+        permission: selectedPermission,
         specificPath: selectedSpecificPath,
       );
-      final baseDirectory = selectedPermission!.rabbi.targetPath;
+      final baseDirectory = selectedPermission.rabbi.targetPath;
       final destinationDirectory =
           (selectedSpecificPath != null && selectedSpecificPath.isNotEmpty)
           ? p.join(baseDirectory, selectedSpecificPath)
@@ -462,6 +472,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
       );
       _logService.logInfo('File transfer successful: $newFileName');
       try {
+        if (!mounted) return;
         await _showPostCopyOptionsDialog(sourceFile, newFileName);
       } catch (e, st) {
         _logService.logError(
@@ -687,7 +698,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
                             inactiveColor: Theme.of(context)
                                 .colorScheme
                                 .onSurface
-                                .withOpacity(0.3),
+                                .withAlpha(77),
                             value: (_pendingSeekMillis ??
                                     position.inMilliseconds.toDouble())
                                 .clamp(
@@ -732,7 +743,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
                                     inactiveColor: Theme.of(context)
                                         .colorScheme
                                         .onSurface
-                                        .withOpacity(0.3),
+                                        .withAlpha(77),
                                     value: snapshot.data ?? 1.0,
                                     onChanged: audioPlayer.setVolume,
                                   ),
@@ -879,7 +890,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
                 allowedRabbisAsync.when(
                   data: (permissions) =>
                       DropdownButtonFormField<UserPermissionInfo>(
-                        value: resolvedSelection.permission,
+                        initialValue: resolvedSelection.permission,
                         items: permissions
                             .map(
                               (p) => DropdownMenuItem(
@@ -924,7 +935,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
                 if (showPathSelector) ...[
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String?>(
-                    value: resolvedSelection.specificPath,
+                    initialValue: resolvedSelection.specificPath,
                     items: resolvedSelection.permission!.specificPaths
                         .map(
                           (path) => DropdownMenuItem(
