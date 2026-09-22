@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -36,6 +35,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
   AppSetting? _appSettings;
   late final LogService _logService;
   AudioPlayer? _audioPlayer;
+  Future<void> _pendingAudioChange = Future<void>.value();
   double? _pendingSeekMillis;
   final List<List<String>> _hebrewKeys = const [
     ['-', '0', '9', '8', '7', '6', '5', '4', '3', '2', '1'],
@@ -51,7 +51,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
     _loadSettings();
     if (widget.selectedFile != null) {
       // Ensure the preview player is initialized for the initially selected file.
-      unawaited(_handleFileChange());
+      _pendingAudioChange = _handleFileChange();
     }
     _logService.logInfo('Transfer Details Panel initialized.');
   }
@@ -60,13 +60,16 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
   void didUpdateWidget(covariant TransferDetailsPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.selectedFile != oldWidget.selectedFile) {
-      _handleFileChange();
+      _pendingAudioChange = _pendingAudioChange.then(
+        (_) => _handleFileChange(),
+      );
     }
   }
 
   /// Handles the safe transition between audio files to prevent threading errors
   /// on Windows (avoiding race conditions between stop and setFilePath).
   Future<void> _handleFileChange() async {
+    if (!mounted) return;
     // Always reset UI form when selection changes.
     _resetForm();
     final audioPlayer = _audioPlayer;
@@ -253,7 +256,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
     }
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     final theme = Theme.of(context);
-    await showDialog(
+    final deleteSource = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) {
@@ -285,7 +288,7 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
           actions: [
             TextButton(
               child: const Text("השאר קובץ מקור"),
-              onPressed: () => Navigator.of(dialogContext).pop(),
+              onPressed: () => Navigator.of(dialogContext).pop(false),
             ),
             FilledButton.tonal(
               style: FilledButton.styleFrom(
@@ -293,38 +296,48 @@ class _TransferDetailsPanelState extends ConsumerState<TransferDetailsPanel> {
                 foregroundColor: theme.colorScheme.onErrorContainer,
               ),
               child: const Text("מחק קובץ מקור"),
-              onPressed: () async {
-                Navigator.of(dialogContext).pop();
-                try {
-                  await sourceFile.delete();
-                  _logService.logUserActivity(
-                    "Source file ${sourceFile.path} deleted successfully by user request.",
-                  );
-                  scaffoldMessenger.showSnackBar(
-                    const SnackBar(
-                      content: Text("קובץ המקור נמחק בהצלחה."),
-                      backgroundColor: Colors.orange,
-                    ),
-                  );
-                } catch (e, st) {
-                  _logService.logError(
-                    "Failed to delete source file ${sourceFile.path}",
-                    e,
-                    st,
-                  );
-                  scaffoldMessenger.showSnackBar(
-                    SnackBar(
-                      content: Text("שגיאה במחיקת קובץ המקור: $e"),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              },
+              onPressed: () => Navigator.of(dialogContext).pop(true),
             ),
           ],
         );
       },
     );
+    if (deleteSource == true) {
+      try {
+        // A paused Windows preview still owns the source file. Wait for any
+        // source switch, then release native resources before deleting it.
+        // Keep the Dart player instance instead of disposing/recreating it.
+        await _pendingAudioChange;
+        await _audioPlayer?.stop();
+        await sourceFile.delete();
+        _logService.logUserActivity(
+          'Source file ${sourceFile.path} deleted successfully by user request.',
+        );
+        if (mounted) {
+          scaffoldMessenger.showSnackBar(
+            const SnackBar(
+              content: Text('קובץ המקור נמחק בהצלחה.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      } catch (e, st) {
+        _logService.logError(
+          'Failed to delete source file ${sourceFile.path}',
+          e,
+          st,
+        );
+        if (mounted) {
+          scaffoldMessenger.showSnackBar(
+            SnackBar(
+              content: Text('שגיאה במחיקת קובץ המקור: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+    if (!mounted) return;
     ref.read(lastCopiedFileNameProvider.notifier).state = null;
     widget.onCopyComplete();
   }
