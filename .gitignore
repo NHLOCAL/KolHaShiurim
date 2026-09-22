@@ -1,6 +1,7 @@
 # Miscellaneous
 *.class
 *.lock
+!src/pubspec.lock
 *.log
 *.pyc
 *.swp

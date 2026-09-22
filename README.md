@@ -102,7 +102,7 @@ flutter build windows --release
 לבניית מתקין ידנית משורש המאגר, לאחר `flutter build windows --release`, מריצים את Inno Setup 6:
 
 ```powershell
-& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer\installer.iss /DMyAppVersion=0.3.0 /DMyAppOutputDir=.
+& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer\installer.iss /DMyAppVersion=0.3.0 "/DMyAppOutputDir=$PWD"
 ```
 
 יישום ה-Windows הבנוי נמצא ב-`src/build/windows/x64/runner/Release`; יש לשמור את כל תוכן התיקייה ביחד כשמכינים חבילה ניידת. המתקין הידני נוצר בשורש המאגר בשם `KolHaShiurimSetup.exe`.

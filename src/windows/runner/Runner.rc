@@ -93,7 +93,7 @@ BEGIN
             VALUE "FileDescription", "KolHaShiurim" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "KolHaShiurim" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2025 ze-kal. All rights reserved." "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 NH Local. MIT License." "\0"
             VALUE "OriginalFilename", "KolHaShiurim.exe" "\0"
             VALUE "ProductName", "KolHaShiurim" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
