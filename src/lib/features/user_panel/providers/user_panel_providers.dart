@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:kol_hashiurim/core/database/database.dart';
 import 'package:kol_hashiurim/core/providers/providers.dart';
+import 'package:kol_hashiurim/models/app_user.dart';
 
 final sourceFilesProvider = FutureProvider.autoDispose<List<File>>((ref) async {
   final authState = ref.watch(authStateProvider);

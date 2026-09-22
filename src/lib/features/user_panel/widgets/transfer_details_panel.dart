@@ -8,6 +8,7 @@ import 'package:material_hebrew_date_picker/material_hebrew_date_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:kol_hashiurim/core/database/database.dart';
 import 'package:kol_hashiurim/core/providers/providers.dart';
+import 'package:kol_hashiurim/models/app_user.dart';
 import 'package:kol_hashiurim/features/user_panel/providers/user_panel_providers.dart';
 import 'package:kol_hashiurim/features/user_panel/utils/permission_selection.dart';
 import 'package:kol_hashiurim/services/log_service.dart';
