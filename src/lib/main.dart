@@ -3,6 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kol_hashiurim/core/providers/providers.dart';
 import 'package:kol_hashiurim/core/router/router.dart';
+import 'package:kol_hashiurim/sponsor_banner.dart';
 import 'package:kol_hashiurim/tray/tray_initializer.dart';
 import 'package:kol_hashiurim/tray/window_actions.dart';
 import 'package:window_manager/window_manager.dart';
@@ -18,7 +19,7 @@ void main(List<String> args) async {
   final logService = container.read(logServiceProvider);
   await logService.init();
   logService.logInfo('Logger initialized in main.');
-  
+
   final bool startSilently = args.contains('--silent') || args.contains('-s');
   logService.logInfo('startSilently = $startSilently');
   logService.logInfo('Process args: $args');
@@ -152,6 +153,12 @@ class MyApp extends ConsumerWidget {
 
     return MaterialApp.router(
       title: 'קול השיעורים',
+      builder: (context, child) => Column(
+        children: [
+          Expanded(child: child ?? const SizedBox.shrink()),
+          const SponsorBanner(),
+        ],
+      ),
       debugShowCheckedModeBanner: false,
       theme: lightTheme,
       darkTheme: darkTheme,
