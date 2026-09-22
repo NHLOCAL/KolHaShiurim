@@ -158,7 +158,13 @@ class MyApp extends ConsumerWidget {
         child: Column(
           children: [
             Expanded(child: child ?? const SizedBox.shrink()),
-            const SponsorBanner(),
+            ListenableBuilder(
+              listenable: router.routeInformationProvider,
+              builder: (context, _) => SponsorBanner(
+                compact:
+                    router.routeInformationProvider.value.uri.path == '/admin',
+              ),
+            ),
           ],
         ),
       ),

@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class SponsorBanner extends StatefulWidget {
-  const SponsorBanner({super.key, this.launchWebsite});
+  const SponsorBanner({super.key, this.launchWebsite, this.compact = false});
+
+  final bool compact;
 
   static final Uri website = Uri.parse('https://alef-bot.top').replace(
     queryParameters: const {
@@ -46,12 +48,24 @@ class _SponsorBannerState extends State<SponsorBanner> {
     final colors = theme.colorScheme;
     return Material(
       color: theme.scaffoldBackgroundColor,
-      child: SizedBox(
+      child: Container(
         width: double.infinity,
+        decoration: widget.compact
+            ? BoxDecoration(
+                border: Border(
+                  top: BorderSide(
+                    color: colors.onSurface.withValues(alpha: 0.10),
+                  ),
+                ),
+              )
+            : null,
         child: SafeArea(
           top: false,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: widget.compact ? 0 : 6,
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -65,23 +79,33 @@ class _SponsorBannerState extends State<SponsorBanner> {
                       onPressed: _openWebsite,
                       style: TextButton.styleFrom(
                         foregroundColor: colors.onSurface,
-                        textStyle: const TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.bold,
-                          decoration: TextDecoration.underline,
+                        minimumSize: const Size(48, 40),
+                        textStyle: TextStyle(
+                          fontSize: widget.compact ? 13 : 17,
+                          fontWeight: widget.compact
+                              ? FontWeight.w500
+                              : FontWeight.bold,
+                          decoration: widget.compact
+                              ? TextDecoration.none
+                              : TextDecoration.underline,
                         ),
                       ),
                       child: const Text(
                         'בחסות אלף בוט - תמלול מדויק לתוכן תורני',
+                        textAlign: TextAlign.center,
                       ),
                     ),
                     Text(
                       '0774632641',
                       textDirection: TextDirection.ltr,
                       style: TextStyle(
-                        color: colors.onSurface,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
+                        color: colors.onSurface.withValues(
+                          alpha: widget.compact ? 0.7 : 1,
+                        ),
+                        fontSize: widget.compact ? 12 : 17,
+                        fontWeight: widget.compact
+                            ? FontWeight.normal
+                            : FontWeight.w600,
                       ),
                     ),
                   ],

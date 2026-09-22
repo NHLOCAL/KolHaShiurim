@@ -42,6 +42,10 @@ void main() {
           findsOneWidget,
         );
         final banner = find.byType(SponsorBanner);
+        expect(tester.widget<SponsorBanner>(banner).compact, route == '/admin');
+        if (route == '/admin') {
+          expect(tester.getSize(banner).height, lessThanOrEqualTo(52));
+        }
         expect(
           tester.getSize(banner).width,
           tester.view.physicalSize.width / tester.view.devicePixelRatio,
