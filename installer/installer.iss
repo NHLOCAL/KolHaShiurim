@@ -12,7 +12,7 @@ AppName=קול השיעורים
 AppVerName=קול השיעורים {#MyAppVersion}
 AppVersion={#MyAppVersion}
 AppPublisher=זה קל
-AppPublisherURL=https://nhlocal.github.io
+AppPublisherURL=https://nhlocal.github.io/?utm_source=kol_hashiurim&utm_medium=installer&utm_campaign=developer_credit
 AppSupportURL=https://github.com/NHLOCAL/KolHaShiurim/issues
 AppUpdatesURL=https://github.com/NHLOCAL/KolHaShiurim/releases
 SetupIconFile="..\src\assets\icons\app_icon.ico"

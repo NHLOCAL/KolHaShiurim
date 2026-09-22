@@ -122,7 +122,9 @@ class _AboutTab extends StatelessWidget {
                       subtitle: Text('nhlocal.github.io', style: linkStyle),
                       onTap: () => _launchUri(
                         context,
-                        Uri.parse('https://nhlocal.github.io'),
+                        Uri.parse(
+                          'https://nhlocal.github.io/?utm_source=kol_hashiurim&utm_medium=desktop_app&utm_campaign=developer_credit&utm_content=about',
+                        ),
                       ),
                       minLeadingWidth: 20,
                     ),

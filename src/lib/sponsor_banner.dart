@@ -4,7 +4,14 @@ import 'package:url_launcher/url_launcher.dart';
 class SponsorBanner extends StatefulWidget {
   const SponsorBanner({super.key, this.launchWebsite});
 
-  static final Uri website = Uri.parse('https://alef-bot.top');
+  static final Uri website = Uri.parse('https://alef-bot.top').replace(
+    queryParameters: const {
+      'utm_source': 'kol_hashiurim',
+      'utm_medium': 'desktop_app',
+      'utm_campaign': 'sponsorship',
+      'utm_content': 'footer',
+    },
+  );
 
   /// Allows the link outcome to be checked without opening a browser in tests.
   final Future<bool> Function(Uri)? launchWebsite;
@@ -35,51 +42,57 @@ class _SponsorBannerState extends State<SponsorBanner> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
     return Material(
-      color: colors.inverseSurface,
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Wrap(
-                alignment: WrapAlignment.center,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 16,
-                runSpacing: 0,
-                children: [
-                  TextButton(
-                    onPressed: _openWebsite,
-                    style: TextButton.styleFrom(
-                      foregroundColor: colors.onInverseSurface,
-                      textStyle: const TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.bold,
-                        decoration: TextDecoration.underline,
+      color: theme.scaffoldBackgroundColor,
+      child: SizedBox(
+        width: double.infinity,
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 16,
+                  runSpacing: 0,
+                  children: [
+                    TextButton(
+                      onPressed: _openWebsite,
+                      style: TextButton.styleFrom(
+                        foregroundColor: colors.onSurface,
+                        textStyle: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                      child: const Text(
+                        'בחסות אלף בוט - תמלול מדויק לתוכן תורני',
                       ),
                     ),
-                    child: const Text('בחסות אלף בוט'),
-                  ),
-                  Text(
-                    '0774632641',
-                    textDirection: TextDirection.ltr,
-                    style: TextStyle(
-                      color: colors.onInverseSurface,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
+                    Text(
+                      '0774632641',
+                      textDirection: TextDirection.ltr,
+                      style: TextStyle(
+                        color: colors.onSurface,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              if (_linkFailed)
-                Text(
-                  'לא ניתן לפתוח את אתר אלף בוט',
-                  style: TextStyle(color: colors.onInverseSurface),
+                  ],
                 ),
-            ],
+                if (_linkFailed)
+                  Text(
+                    'לא ניתן לפתוח את אתר אלף בוט',
+                    style: TextStyle(color: colors.onSurface),
+                  ),
+              ],
+            ),
           ),
         ),
       ),

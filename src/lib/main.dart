@@ -153,11 +153,14 @@ class MyApp extends ConsumerWidget {
 
     return MaterialApp.router(
       title: 'קול השיעורים',
-      builder: (context, child) => Column(
-        children: [
-          Expanded(child: child ?? const SizedBox.shrink()),
-          const SponsorBanner(),
-        ],
+      builder: (context, child) => ColoredBox(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        child: Column(
+          children: [
+            Expanded(child: child ?? const SizedBox.shrink()),
+            const SponsorBanner(),
+          ],
+        ),
       ),
       debugShowCheckedModeBanner: false,
       theme: lightTheme,
