@@ -88,7 +88,7 @@
 
 ## פיתוח ובניית גרסה
 
-קוד Flutter נמצא בתיקיית `src`. לבנייה ב-Windows נדרשים Flutter 3.41.9 (Dart 3.11.5), Visual Studio עם רכיב Desktop development with C++, ולהפקת מתקין גם Inno Setup 6. מתוך `src` מריצים:
+קוד Flutter נמצא בתיקיית `src`. לבנייה ב-Windows נדרשים Flutter 3.41.9 (Dart 3.11.5), Visual Studio 2022 עם רכיב Desktop development with C++, ולהפקת מתקין גם Inno Setup 6. פעולת GitHub משתמשת ב-`windows-2022` כדי לשמור על תאימות לתוסף השמע הקיים. מתוך `src` מריצים:
 
 ```powershell
 flutter pub get --enforce-lockfile

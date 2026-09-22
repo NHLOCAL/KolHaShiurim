@@ -19,7 +19,8 @@ concurrency:
 jobs:
   windows:
     name: Build Windows installer and portable ZIP
-    runs-on: windows-latest
+    # The vendored audio plugin uses C++17 WinRT headers unsupported by VS 2026.
+    runs-on: windows-2022
     outputs:
       release_tag: ${{ steps.version.outputs.release_tag }}
     steps:
