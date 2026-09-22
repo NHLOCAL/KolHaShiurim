@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:kol_hashiurim/services/log_service.dart';
+import 'package:kol_hashiurim/services/process_runner.dart';
 import 'package:kol_hashiurim/utils/file_name_sanitizer.dart';
 
 typedef ProcessRunner = Future<ProcessResult> Function(
@@ -17,21 +18,12 @@ class FileService {
   final Duration _ffmpegCheckTimeout;
   final Duration _ffmpegConversionTimeout;
 
-  static Future<ProcessResult> _runProcess(
-    String executable,
-    List<String> arguments, {
-    Duration? timeout,
-  }) {
-    final future = Process.run(executable, arguments);
-    return timeout == null ? future : future.timeout(timeout);
-  }
-
   FileService(
     this._logService, {
     ProcessRunner? processRunner,
     Duration ffmpegCheckTimeout = const Duration(seconds: 5),
     Duration ffmpegConversionTimeout = const Duration(minutes: 10),
-  })  : _processRunner = processRunner ?? _runProcess,
+  })  : _processRunner = processRunner ?? runProcess,
         _ffmpegCheckTimeout = ffmpegCheckTimeout,
         _ffmpegConversionTimeout = ffmpegConversionTimeout;
 
