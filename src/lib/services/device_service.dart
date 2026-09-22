@@ -1,14 +1,32 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'package:kol_hashiurim/models/device_info.dart';
 import 'package:kol_hashiurim/services/log_service.dart';
 import 'package:kol_hashiurim/services/device_scanner_isolate.dart';
 
 typedef DeviceScanner = Future<List<ConnectedDeviceInfo>> Function();
+
+Future<String?> findVolumeIdExecutable({
+  String? applicationExecutable,
+  String? pathEnvironment,
+}) async {
+  final executable = applicationExecutable ?? Platform.resolvedExecutable;
+  final searchDirectories = [
+    p.dirname(executable),
+    ...(pathEnvironment ?? Platform.environment['PATH'] ?? '').split(';'),
+  ];
+  for (final directory in searchDirectories) {
+    final trimmed = directory.trim().replaceAll(RegExp(r'^"|"$'), '');
+    if (trimmed.isEmpty) continue;
+    final candidate = File(p.join(trimmed, 'Volumeid.exe'));
+    if (await candidate.exists() && await candidate.length() > 0) {
+      return candidate.path;
+    }
+  }
+  return null;
+}
 
 class DeviceService {
   final _controller = StreamController<List<ConnectedDeviceInfo>>.broadcast();
@@ -19,7 +37,7 @@ class DeviceService {
   static const _pollingInterval = Duration(seconds: 4);
 
   DeviceService(this._logService, {DeviceScanner? scanDevices})
-      : _scanDevices = scanDevices ?? _scanDevicesViaIsolate {
+    : _scanDevices = scanDevices ?? _scanDevicesViaIsolate {
     _logService.logInfo('DeviceService initialized (Isolate Mode).');
   }
 
@@ -77,10 +95,7 @@ class DeviceService {
     final isolateResults = await compute(scanDevicesSync, null);
     final devices = isolateResults
         .map(
-          (d) => ConnectedDeviceInfo(
-            mountPath: d.path,
-            serialNumber: d.serial,
-          ),
+          (d) => ConnectedDeviceInfo(mountPath: d.path, serialNumber: d.serial),
         )
         .toList();
 
@@ -120,24 +135,19 @@ class DeviceService {
           normalizedMount,
         );
       }
-      final tempDir = await getTemporaryDirectory();
-      final volumeIdPath = p.join(tempDir.path, 'Volumeid.exe');
-      final volumeIdFile = File(volumeIdPath);
-
-      if (!await volumeIdFile.exists() || await volumeIdFile.length() == 0) {
-        final byteData = await rootBundle.load('assets/bin/Volumeid.exe');
-        await volumeIdFile.writeAsBytes(
-          byteData.buffer.asUint8List(
-            byteData.offsetInBytes,
-            byteData.lengthInBytes,
-          ),
+      final volumeIdPath = await findVolumeIdExecutable();
+      if (volumeIdPath == null) {
+        throw StateError(
+          'VolumeID לא נמצא. יש להוריד את Volumeid.exe מאתר Microsoft '
+          '(https://learn.microsoft.com/sysinternals/downloads/volumeid) '
+          'ולשמור אותו לצד התוכנה או להוסיף את התיקייה שלו ל-PATH',
         );
       }
 
       final result = await Process.run(volumeIdPath, [
         normalizedMount.substring(0, 2),
         formatted,
-      ], runInShell: true);
+      ]);
 
       if (result.exitCode != 0) {
         throw Exception(
