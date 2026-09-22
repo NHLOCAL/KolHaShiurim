@@ -1,7 +1,5 @@
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kol_hashiurim/core/database/database.dart';
-import 'package:kol_hashiurim/core/license/license_manager.dart';
 import 'package:kol_hashiurim/models/app_user.dart';
 import 'package:kol_hashiurim/services/device_service.dart';
 import 'package:kol_hashiurim/services/file_service.dart';
@@ -9,18 +7,6 @@ import 'package:kol_hashiurim/services/log_service.dart';
 import 'package:kol_hashiurim/models/device_info.dart';
 import 'package:kol_hashiurim/tray/window_actions.dart';
 import 'package:window_manager/window_manager.dart';
-
-final licenseManagerProvider = FutureProvider<LicenseManager>((ref) async {
-  final pubPem = await rootBundle.loadString('assets/keys/public.pem');
-  final publicKey = parsePublicKeyFromPem(pubPem);
-  return LicenseManager(publicKey);
-});
-
-final licenseStatusProvider = FutureProvider<bool>((ref) async {
-  final licenseManager = await ref.watch(licenseManagerProvider.future);
-  final logService = ref.read(logServiceProvider);
-  return licenseManager.hasValidLicense(logService);
-});
 
 final databaseProvider = Provider<AppDatabase>((_) => AppDatabase());
 
@@ -55,21 +41,21 @@ class AuthStateNotifier extends StateNotifier<AppUserState> {
   late final DeviceService _deviceService;
 
   AuthStateNotifier(this._ref, {bool enableDevicePolling = true})
-      : super(const AppUserState.loggedOut()) {
+    : super(const AppUserState.loggedOut()) {
     _logService = _ref.read(logServiceProvider);
     _deviceService = _ref.read(deviceServiceProvider);
     if (enableDevicePolling) {
       _listenForDevices();
 
       _deviceService.startPolling();
-      _logService.logInfo(
-        'Application started, device polling initiated.',
-      );
+      _logService.logInfo('Application started, device polling initiated.');
     }
   }
 
   void _listenForDevices() {
-    _ref.listen<AsyncValue<List<ConnectedDeviceInfo>>>(connectedDevicesProvider, (_, asyncValue) {
+    _ref.listen<
+      AsyncValue<List<ConnectedDeviceInfo>>
+    >(connectedDevicesProvider, (_, asyncValue) {
       asyncValue.when(
         data: (List<ConnectedDeviceInfo> devices) async {
           if (state.isAdmin) {
@@ -99,13 +85,13 @@ class AuthStateNotifier extends StateNotifier<AppUserState> {
                 final user = await (db.select(
                   db.users,
                 )..where((u) => u.id.equals(dbDevice.userId))).getSingle();
-                
+
                 state = AppUserState.user(
                   user: user,
                   device: dbDevice,
                   mountPath: dev.mountPath,
                 );
-                
+
                 _logService.logUserActivity(
                   'User ${user.name} auto-logged in via device ${dev.serialNumber}.',
                 );
@@ -124,7 +110,9 @@ class AuthStateNotifier extends StateNotifier<AppUserState> {
   }
 
   Future<void> loginAsAdmin() async {
-    _logService.logUserActivity('Admin login requested. Stopping device polling.');
+    _logService.logUserActivity(
+      'Admin login requested. Stopping device polling.',
+    );
     _deviceService.stopPolling();
     state = const AppUserState.admin();
     WindowActions.showAdminPanel();

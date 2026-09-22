@@ -1,7 +1,7 @@
 name: kol_hashiurim
 description: "A secure transfer system for Torah shiurim recordings."
 publish_to: 'none'
-version: 0.2.2+4
+version: 0.3.0+5
 
 environment:
   sdk: '>=3.8.0 <4.0.0'
@@ -30,10 +30,6 @@ dependencies:
   window_manager: ^0.5.1
   tray_manager: ^0.5.2
   win32: ^5.15.0
-  pointycastle: ^4.0.0
-  basic_utils: ^5.8.2
-  windows_system_info: ^0.0.4
-  canonical_json: ^1.1.2
   just_audio: ^0.10.5
   just_audio_windows: ^0.2.2
   url_launcher: ^6.3.2
@@ -56,5 +52,3 @@ flutter:
   uses-material-design: true
   assets:
     - assets/icons/app_icon.ico
-    - assets/keys/public.pem
-    - assets/bin/Volumeid.exe
