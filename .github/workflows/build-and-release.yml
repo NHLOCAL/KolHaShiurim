@@ -1,67 +1,170 @@
-# File: .github/workflows/build-and-release.yml
-name: Build Shiur-Bot Windows
+name: Build and draft Windows release
 
 on:
   push:
     branches:
       - main
       - dev
+    tags:
+      - 'v[0-9]*'
   workflow_dispatch:
 
-jobs:
-  build-windows:
-    name: Build Windows Executable
-    runs-on: windows-latest
+permissions:
+  contents: read
 
+concurrency:
+  group: windows-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    name: Build Windows installer and portable ZIP
+    # The vendored audio plugin uses C++17 WinRT headers unsupported by VS 2026.
+    runs-on: windows-2022
+    outputs:
+      release_tag: ${{ steps.version.outputs.release_tag }}
     steps:
-      - name: Checkout repository
+      - name: Check out source
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate release version
+        id: version
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $pubspec = Get-Content -LiteralPath 'src/pubspec.yaml' -Raw -Encoding UTF8
+          if ($pubspec -notmatch '(?m)^version:\s*(\d+\.\d+\.\d+)(?:\+\d+)?\s*$') {
+            throw 'src/pubspec.yaml must contain a numeric semantic version.'
+          }
+          $version = $Matches[1]
+          $tag = "v$version"
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne $tag) {
+            throw "Tag $env:GITHUB_REF_NAME does not match pubspec version $version."
+          }
+          if ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch' -and $env:GITHUB_REF_TYPE -ne 'tag') {
+            $existingTag = git tag --list $tag
+            if ($existingTag) {
+              $tagCommit = git rev-list -n 1 $tag
+              if ($tagCommit -ne $env:GITHUB_SHA) {
+                throw "Tag $tag already points to another commit. Run the workflow from that tag or update pubspec."
+              }
+            }
+          }
+          "release_tag=$tag" >> $env:GITHUB_OUTPUT
+          "APP_VERSION=$version" >> $env:GITHUB_ENV
+          "RELEASE_TAG=$tag" >> $env:GITHUB_ENV
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.32.4'
-          channel: 'stable'
+          flutter-version: '3.41.9'
+          channel: stable
           cache: true
 
-      - name: Cache Pub dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ${{ env.FLUTTER_HOME }}/.pub-cache
-            src/.dart_tool
-            src/.packages
-          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-pub-
-
-      - name: Run flutter clean
-        run: flutter clean
-        working-directory: src
-
       - name: Install dependencies
-        run: flutter pub get
         working-directory: src
+        run: flutter pub get --enforce-lockfile
 
-      - name: Generate code (build_runner)
-        run: flutter pub run build_runner build --delete-conflicting-outputs
+      - name: Generate source
         working-directory: src
+        run: dart run build_runner build --delete-conflicting-outputs
 
-      - name: Build Windows executable
-        run: flutter build windows --release
+      - name: Run tests
         working-directory: src
+        run: flutter test --no-pub
 
-      - name: Verify generated_config.cmake exists
-        run: dir windows/flutter
+      - name: Analyze source
         working-directory: src
+        run: flutter analyze --no-pub --no-fatal-warnings
 
-      - name: Package Release with PowerShell
+      - name: Build Windows application
+        working-directory: src
+        run: flutter build windows --release --no-pub
+
+      - name: Include license and documentation
+        shell: pwsh
         run: |
-          Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath shiur-bot-windows-${{ github.ref_name }}.zip -Force
-        working-directory: src
+          $destination = 'src/build/windows/x64/runner/Release'
+          Copy-Item -LiteralPath 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'README.md' -Destination $destination
+          New-Item -ItemType Directory -Path "$destination/docs" -Force | Out-Null
+          Copy-Item -LiteralPath 'docs/מדריך שימוש.md' -Destination "$destination/docs"
 
-      - name: Upload Windows artifact
+      - name: Verify Windows executable
+        shell: pwsh
+        run: |
+          if (-not (Test-Path -LiteralPath 'src/build/windows/x64/runner/Release/kol_hashiurim.exe')) {
+            throw 'Windows release executable was not produced.'
+          }
+
+      - name: Create portable ZIP
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $source = 'src/build/windows/x64/runner/Release'
+          $prohibited = Get-ChildItem -LiteralPath $source -Recurse -File | Where-Object {
+            $_.Name -match '^(Volumeid(?:64)?\.exe|ffmpeg\.exe|private\.pem|public\.pem|app\.lic|\.env(?:\..*)?|app_log\.txt)$' -or
+            $_.Extension -in '.sqlite', '.db', '.lic', '.pfx', '.p12', '.key'
+          }
+          if ($prohibited) { throw 'Release contains a private file or an external tool that must not be distributed.' }
+          Compress-Archive -Path "$source/*" -DestinationPath "kol-hashiurim-${env:RELEASE_TAG}-windows-portable.zip" -Force
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco upgrade innosetup --version=6.7.3 --allow-downgrade --yes --no-progress
+
+      - name: Build Hebrew Windows installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6/ISCC.exe'
+          if (-not (Test-Path -LiteralPath $iscc)) {
+            throw 'Inno Setup compiler was not found.'
+          }
+          & $iscc 'installer/installer.iss' "/DMyAppVersion=$env:APP_VERSION" "/DMyAppOutputDir=$PWD"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Inno Setup failed with exit code $LASTEXITCODE."
+          }
+
+      - name: Name installer
+        shell: pwsh
+        run: |
+          Move-Item -LiteralPath 'KolHaShiurimSetup.exe' -Destination "kol-hashiurim-${env:RELEASE_TAG}-windows-setup.exe"
+
+      - name: Upload Windows files
         uses: actions/upload-artifact@v4
         with:
-          name: shiur-bot-windows
-          path: src/shiur-bot-windows-${{ github.ref_name }}.zip
+          name: kol-hashiurim-windows-${{ steps.version.outputs.release_tag }}
+          path: |
+            kol-hashiurim-${{ steps.version.outputs.release_tag }}-windows-portable.zip
+            kol-hashiurim-${{ steps.version.outputs.release_tag }}-windows-setup.exe
+          if-no-files-found: error
+
+  release:
+    name: Create draft GitHub release
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    needs: windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download Windows files
+        uses: actions/download-artifact@v4
+        with:
+          name: kol-hashiurim-windows-${{ needs.windows.outputs.release_tag }}
+          path: dist
+
+      - name: Create draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.windows.outputs.release_tag }}
+          target_commitish: ${{ github.sha }}
+          name: קול השיעורים ${{ needs.windows.outputs.release_tag }}
+          draft: true
+          prerelease: false
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            dist/kol-hashiurim-${{ needs.windows.outputs.release_tag }}-windows-portable.zip
+            dist/kol-hashiurim-${{ needs.windows.outputs.release_tag }}-windows-setup.exe

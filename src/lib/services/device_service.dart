@@ -1,36 +1,64 @@
 import 'dart:async';
-import 'dart:ffi';
 import 'dart:io';
-import 'package:ffi/ffi.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
-import 'package:win32/win32.dart';
 import 'package:kol_hashiurim/models/device_info.dart';
 import 'package:kol_hashiurim/services/log_service.dart';
+import 'package:kol_hashiurim/services/device_scanner_isolate.dart';
+
+typedef DeviceScanner = Future<List<ConnectedDeviceInfo>> Function();
+
+Future<String?> findVolumeIdExecutable({
+  String? applicationExecutable,
+  String? pathEnvironment,
+}) async {
+  final executable = applicationExecutable ?? Platform.resolvedExecutable;
+  final searchDirectories = [
+    p.dirname(executable),
+    ...(pathEnvironment ?? Platform.environment['PATH'] ?? '').split(';'),
+  ];
+  for (final directory in searchDirectories) {
+    final trimmed = directory.trim().replaceAll(RegExp(r'^"|"$'), '');
+    if (trimmed.isEmpty) continue;
+    final candidate = File(p.join(trimmed, 'Volumeid.exe'));
+    if (await candidate.exists() && await candidate.length() > 0) {
+      return candidate.path;
+    }
+  }
+  return null;
+}
 
 class DeviceService {
   final _controller = StreamController<List<ConnectedDeviceInfo>>.broadcast();
   final LogService _logService;
   Timer? _pollingTimer;
-  static const _pollingInterval = Duration(seconds: 5);
-  DeviceService(this._logService) {
-    _logService.logInfo('DeviceService initialized.');
+  Future<List<ConnectedDeviceInfo>>? _scanFuture;
+  final DeviceScanner _scanDevices;
+  static const _pollingInterval = Duration(seconds: 4);
+
+  DeviceService(this._logService, {DeviceScanner? scanDevices})
+    : _scanDevices = scanDevices ?? _scanDevicesViaIsolate {
+    _logService.logInfo('DeviceService initialized (Isolate Mode).');
   }
+
   Stream<List<ConnectedDeviceInfo>> watchConnectedDevices() =>
       _controller.stream.distinct((a, b) => _areEqual(a, b));
+
   Future<List<ConnectedDeviceInfo>> getConnectedDevices() async {
-    return _getDevices();
+    _scanFuture ??= _performScan();
+    return _scanFuture!;
   }
 
   void startPolling() {
     if (_pollingTimer?.isActive ?? false) {
-      _logService.logInfo('Polling is already active.');
       return;
     }
-    _logService.logInfo('Starting device polling.');
-    _refreshDevices();
-    _pollingTimer = Timer.periodic(_pollingInterval, (_) => _refreshDevices());
+    _logService.logInfo('Starting device polling via Isolate.');
+    _performScanAndEmit();
+    _pollingTimer = Timer.periodic(
+      _pollingInterval,
+      (_) => _performScanAndEmit(),
+    );
   }
 
   void stopPolling() {
@@ -41,79 +69,38 @@ class DeviceService {
     }
   }
 
-  Future<void> _refreshDevices() async {
-    final devices = await _getDevices();
-    if (!_controller.isClosed) {
-      _controller.add(devices);
+  Future<void> _performScanAndEmit() async {
+    try {
+      final devices = await getConnectedDevices();
+      if (!_controller.isClosed) {
+        _controller.add(devices);
+      }
+    } catch (e, st) {
+      _logService.logError('Error in polling loop', e, st);
     }
   }
 
-  Future<List<ConnectedDeviceInfo>> _getDevices() async {
+  Future<List<ConnectedDeviceInfo>> _performScan() async {
     try {
-      final devices = <ConnectedDeviceInfo>[];
-      final mask = GetLogicalDrives();
-      for (var i = 0; i < 26; i++) {
-        if ((mask & (1 << i)) == 0) continue;
-        final letter = String.fromCharCode(65 + i);
-        final root = '$letter:\\';
-        final rootPtr = root.toNativeUtf16();
-        try {
-          if (GetDriveType(rootPtr) != DRIVE_REMOVABLE) {
-            continue;
-          }
-          final volNameBufNative = calloc<Uint16>(MAX_PATH);
-          final fsNameBufNative = calloc<Uint16>(MAX_PATH);
-          final pSerialNumber = calloc<Uint32>();
-          final pMaxComponentLen = calloc<Uint32>();
-          final pFileSystemFlags = calloc<Uint32>();
-          try {
-            final success = GetVolumeInformation(
-              rootPtr,
-              volNameBufNative.cast<Utf16>(),
-              MAX_PATH,
-              pSerialNumber,
-              pMaxComponentLen,
-              pFileSystemFlags,
-              fsNameBufNative.cast<Utf16>(),
-              MAX_PATH,
-            );
-            if (success != 0) {
-              final serialHex = pSerialNumber.value
-                  .toRadixString(16)
-                  .toUpperCase()
-                  .padLeft(8, '0');
-              final formatted =
-                  '${serialHex.substring(0, 4)}-${serialHex.substring(4)}';
-              devices.add(
-                ConnectedDeviceInfo(mountPath: root, serialNumber: formatted),
-              );
-            } else {
-              _logService.logInfo(
-                'Could not get volume information for removable drive $root. This is often normal for empty readers. Win32 Error: ${GetLastError()}',
-              );
-            }
-          } finally {
-            calloc.free(volNameBufNative);
-            calloc.free(fsNameBufNative);
-            calloc.free(pSerialNumber);
-            calloc.free(pMaxComponentLen);
-            calloc.free(pFileSystemFlags);
-          }
-        } catch (e, st) {
-          _logService.logError(
-            "Error processing drive $root. This might be a bug or an unexpected system state.",
-            e,
-            st,
-          );
-        } finally {
-          calloc.free(rootPtr);
-        }
-      }
-      return devices;
+      return await _scanDevices();
     } catch (e, st) {
-      _logService.logError('Error enumerating drives', e, st);
+      _logService.logError('Fatal error in isolate scan', e, st);
       return [];
+    } finally {
+      _scanFuture = null;
     }
+  }
+
+  static Future<List<ConnectedDeviceInfo>> _scanDevicesViaIsolate() async {
+    final isolateResults = await compute(scanDevicesSync, null);
+    final devices = isolateResults
+        .map(
+          (d) => ConnectedDeviceInfo(mountPath: d.path, serialNumber: d.serial),
+        )
+        .toList();
+
+    devices.sort((a, b) => a.mountPath.compareTo(b.mountPath));
+    return devices;
   }
 
   bool _areEqual(List<ConnectedDeviceInfo> a, List<ConnectedDeviceInfo> b) {
@@ -124,42 +111,70 @@ class DeviceService {
   }
 
   Future<String> changeVolumeSerialNumber(String mount, String serial) async {
+    stopPolling();
     _logService.logUserActivity('Changing serial for $mount to $serial.');
+
+    if (!Platform.isWindows) {
+      startPolling();
+      throw UnsupportedError(
+        'Volume serial changes are only supported on Windows.',
+      );
+    }
     final s = serial.replaceAll('-', '');
     if (!RegExp(r'^[0-9A-Fa-f]{8}$').hasMatch(s)) {
-      _logService.logError('Invalid serial: $serial');
+      startPolling();
       throw const FormatException('Use 8 hex digits, e.g. 1234ABCD.');
     }
     final formatted = '${s.substring(0, 4)}-${s.substring(4)}';
+
     try {
-      final tempDir = await getTemporaryDirectory();
-      final volumeIdPath = p.join(tempDir.path, 'Volumeid.exe');
-      final volumeIdFile = File(volumeIdPath);
-      final byteData = await rootBundle.load('assets/bin/Volumeid.exe');
-      await volumeIdFile.writeAsBytes(
-        byteData.buffer.asUint8List(
-          byteData.offsetInBytes,
-          byteData.lengthInBytes,
-        ),
-      );
-      final result = await Process.run(volumeIdPath, [
-        mount,
-        formatted,
-      ], runInShell: true);
-      await volumeIdFile.delete();
-      if (result.exitCode != 0) {
-        _logService.logError('volumeid.exe failed: ${result.stderr}');
-        throw Exception(
-          'Failed to execute volumeid.exe. Error: ${result.stderr}',
+      final normalizedMount = _normalizeMountPath(mount);
+      if (!await Directory(normalizedMount).exists()) {
+        throw FileSystemException(
+          'Mount path is not available',
+          normalizedMount,
         );
       }
-      await _refreshDevices();
-      _logService.logUserActivity('Serial for $mount changed to $formatted.');
-      return 'Serial changed to $formatted. Replug device to apply.';
+      final volumeIdPath = await findVolumeIdExecutable();
+      if (volumeIdPath == null) {
+        throw StateError(
+          'VolumeID לא נמצא. יש להוריד את Volumeid.exe מאתר Microsoft '
+          '(https://learn.microsoft.com/sysinternals/downloads/volumeid) '
+          'ולשמור אותו לצד התוכנה או להוסיף את התיקייה שלו ל-PATH',
+        );
+      }
+
+      final result = await Process.run(volumeIdPath, [
+        normalizedMount.substring(0, 2),
+        formatted,
+      ]);
+
+      if (result.exitCode != 0) {
+        throw Exception(
+          'Failed: exit code ${result.exitCode}. StdOut: ${result.stdout}. StdErr: ${result.stderr}',
+        );
+      }
+
+      _logService.logUserActivity('Serial changed successfully.');
+      return 'Serial changed to $formatted. Replug device.';
     } catch (e, st) {
       _logService.logError('Error running volumeid.exe', e, st);
-      throw Exception('Could not change serial number. See logs for details.');
+      rethrow;
+    } finally {
+      startPolling();
     }
+  }
+
+  String _normalizeMountPath(String mount) {
+    final trimmed = mount.trim();
+    if (trimmed.isEmpty) {
+      throw const FormatException('Mount path cannot be empty.');
+    }
+    final normalized = trimmed.endsWith('\\') ? trimmed : '$trimmed\\';
+    if (!RegExp(r'^[A-Za-z]:\\$').hasMatch(normalized)) {
+      throw FormatException('Mount path must be a drive root like "F:\\".');
+    }
+    return normalized;
   }
 
   void dispose() {
@@ -167,6 +182,5 @@ class DeviceService {
     if (!_controller.isClosed) {
       _controller.close();
     }
-    _logService.logInfo('DeviceService disposed.');
   }
 }

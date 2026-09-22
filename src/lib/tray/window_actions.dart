@@ -19,7 +19,7 @@ class WindowActions {
   static void _forceShowOnTop() {
     if (!Platform.isWindows) return;
 
-    final ptrTitle = 'קול השיעורים'.toNativeUtf16();
+    final ptrTitle = 'קול השיעורים'.toNativeUtf16(allocator: calloc);
 
     final hwnd = win32.FindWindow(dart_ffi.nullptr.cast<Utf16>(), ptrTitle);
     calloc.free(ptrTitle);
@@ -48,7 +48,9 @@ class WindowActions {
     if (!Platform.isWindows) {
       try {
         await windowManager.setMovable(true);
-      } on MissingPluginException {}
+      } on MissingPluginException {
+        // Plugin not available on this platform/runtime.
+      }
     }
 
     await windowManager.setTitleBarStyle(TitleBarStyle.normal);
@@ -64,7 +66,9 @@ class WindowActions {
     if (!Platform.isWindows) {
       try {
         await windowManager.setMovable(false);
-      } on MissingPluginException {}
+      } on MissingPluginException {
+        // Plugin not available on this platform/runtime.
+      }
     }
 
     await windowManager.setTitleBarStyle(TitleBarStyle.hidden);

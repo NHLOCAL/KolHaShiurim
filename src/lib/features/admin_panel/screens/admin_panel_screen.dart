@@ -79,7 +79,7 @@ class _AboutTab extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'מערכת העברת שיעורים מאובטחת',
+                      'מערכת העברת שיעורים בקוד פתוח ברישיון MIT',
                       style: Theme.of(context).textTheme.titleSmall,
                     ),
                     const Divider(height: 32),
@@ -98,7 +98,7 @@ class _AboutTab extends StatelessWidget {
                     ),
                     ListTile(
                       leading: const Icon(Icons.alternate_email_outlined),
-                      title: const Text('ליצירת קשר וקבלת רישיון'),
+                      title: const Text('ליצירת קשר'),
                       subtitle: Text('nh.local11@gmail.com', style: linkStyle),
                       onTap: () {
                         final emailUri = Uri(
@@ -122,7 +122,9 @@ class _AboutTab extends StatelessWidget {
                       subtitle: Text('nhlocal.github.io', style: linkStyle),
                       onTap: () => _launchUri(
                         context,
-                        Uri.parse('https://nhlocal.github.io'),
+                        Uri.parse(
+                          'https://nhlocal.github.io/?utm_source=kol_hashiurim&utm_medium=desktop_app&utm_campaign=developer_credit&utm_content=about',
+                        ),
                       ),
                       minLeadingWidth: 20,
                     ),

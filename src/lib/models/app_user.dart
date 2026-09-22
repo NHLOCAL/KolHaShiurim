@@ -5,7 +5,7 @@ import 'package:kol_hashiurim/core/database/database.dart';
 part 'app_user.freezed.dart';
 
 @freezed
-class AppUserState with _$AppUserState {
+sealed class AppUserState with _$AppUserState {
   const factory AppUserState.loggedOut() = _LoggedOut;
   const factory AppUserState.admin() = _Admin;
 

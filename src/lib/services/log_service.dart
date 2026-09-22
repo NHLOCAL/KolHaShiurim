@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
+import 'package:flutter/foundation.dart';
 
 // רמות לוג שונות
 enum LogLevel { info, userActivity, warning, error }
@@ -10,18 +11,21 @@ class LogService {
   static const String _logFileName = 'app_log.txt'; // שם קובץ הלוג
   static const String _logDirectoryName =
       'logs'; // תיקיית הלוג בתוך תיקיית התמיכה של האפליקציה
-  static const String _applicationName =
-      'TorahShiurimTransfer'; // שם היישום לשימוש בנתיב התיקייה
+  Future<void> _writeQueue = Future.value();
+
+  // Debug-only console logging (avoids printing in release builds).
+  void _debugLog(String message) {
+    assert(() {
+      debugPrint(message);
+      return true;
+    }());
+  }
 
   // אתחול שירות הלוג
   Future<void> init() async {
     try {
       final appSupportDir = await getApplicationSupportDirectory();
-      // יצירת תיקייה ספציפית לאפליקציה בתוך AppData/Roaming (בווינדוס)
-      final appSpecificDir = Directory(
-        p.join(appSupportDir.path, _applicationName),
-      );
-      final logDir = Directory(p.join(appSpecificDir.path, _logDirectoryName));
+      final logDir = Directory(p.join(appSupportDir.path, _logDirectoryName));
 
       // וודא שהתיקייה קיימת, אם לא - צור אותה (כולל תיקיות אב)
       if (!await logDir.exists()) {
@@ -29,15 +33,15 @@ class LogService {
       }
       _logFile = File(p.join(logDir.path, _logFileName));
       // הדפסת נתיב הלוג לקונסול לפיתוח ודיבוג
-      print('Log file path: ${_logFile.path}');
+      _debugLog('Log file path: ${_logFile.path}');
     } catch (e, st) {
       // אם האתחול נכשל, הדפס שגיאה לקונסול
-      print('Failed to initialize LogService: $e\n$st');
+      _debugLog('Failed to initialize LogService: $e\n$st');
     }
   }
 
   // פונקציה פנימית לכתיבת הודעה לקובץ הלוג
-  Future<void> _writeLog(LogLevel level, String message) async {
+  Future<void> _writeLogUnlocked(LogLevel level, String message) async {
     try {
       // וודא שקובץ הלוג קיים לפני כתיבה אליו
       if (!await _logFile.exists()) {
@@ -56,10 +60,20 @@ class LogService {
       );
     } catch (e) {
       // אם הכתיבה לקובץ נכשלת, הדפס שגיאה לקונסול
-      print(
+      _debugLog(
         'ERROR: Failed to write to log file: $e. Message: [$level.name] $message',
       );
     }
+  }
+
+  // Serialize writes so log entries don't interleave/corrupt when callers don't await.
+  Future<void> _writeLog(LogLevel level, String message) {
+    _writeQueue = _writeQueue.then((_) => _writeLogUnlocked(level, message));
+    // Ensure one failed write doesn't permanently break the queue chain.
+    _writeQueue = _writeQueue.catchError((e, st) {
+      _debugLog('ERROR: Log write queue error: $e\n$st');
+    });
+    return _writeQueue;
   }
 
   // פונקציות ציבוריות לכתיבת לוגים ברמות שונות

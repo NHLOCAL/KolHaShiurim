@@ -1,6 +1,7 @@
 # Miscellaneous
 *.class
 *.lock
+!src/pubspec.lock
 *.log
 *.pyc
 *.swp
@@ -122,3 +123,14 @@ private.pem
 *.lic
 **/Output
 ffmpeg.exe
+
+# Local runtime data and credentials
+/logs/
+.env
+.env.*
+*.db
+*.sqlite
+*.sqlite3
+*.key
+*.p12
+*.pfx

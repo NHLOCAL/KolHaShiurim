@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kol_hashiurim/core/providers/providers.dart';
+import 'package:kol_hashiurim/models/app_user.dart';
 import 'package:kol_hashiurim/features/user_panel/widgets/file_selection_panel.dart';
 import 'package:kol_hashiurim/features/user_panel/widgets/transfer_details_panel.dart';
 
