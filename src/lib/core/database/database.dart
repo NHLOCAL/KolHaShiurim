@@ -19,6 +19,8 @@ part 'database.g.dart';
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
+  AppDatabase.forDirectory(Directory directory)
+    : super(_openConnection(directory));
   AppDatabase.forTesting(super.executor);
 
   @override
@@ -142,7 +144,7 @@ class AppDatabase extends _$AppDatabase {
       await (delete(
         userRabbiPermissions,
       )..where((p) => p.userId.equals(userId))).go();
-      
+
       for (final entry in permissions.entries) {
         final rabbiId = entry.key;
         final paths = entry.value;
@@ -176,7 +178,7 @@ class AppDatabase extends _$AppDatabase {
     var setting = await (select(
       appSettings,
     )..where((s) => s.id.equals(1))).getSingleOrNull();
-    
+
     if (setting == null) {
       final defaultSettings = AppSettingsCompanion.insert(id: const Value(1));
       await into(
@@ -210,10 +212,17 @@ class UserPermissionInfo {
   UserPermissionInfo({required this.rabbi, required this.specificPaths});
 }
 
-LazyDatabase _openConnection() {
+LazyDatabase _openConnection([Directory? directory]) {
   return LazyDatabase(() async {
-    final dbFolder = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dbFolder.path, 'kol_hashiurim.sqlite'));
+    final dbFolder = directory ?? await getApplicationDocumentsDirectory();
+    final currentFile = File(p.join(dbFolder.path, 'kol_hashiurim.sqlite'));
+    final legacyFile = File(p.join(dbFolder.path, 'torah_shiurim.sqlite'));
+    // Open the old file in place, so SQLite also sees any uncheckpointed WAL.
+    // Once the current file exists, keep using it rather than replacing data.
+    var file = currentFile;
+    if (!await currentFile.exists() && await legacyFile.exists()) {
+      file = legacyFile;
+    }
     return NativeDatabase(
       file,
       setup: (database) {
